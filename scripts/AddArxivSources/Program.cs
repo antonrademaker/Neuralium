@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Neuralium.Data;
 using Neuralium.Data.Models;
 
-var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__neuralium") 
+var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__neuralium")
     ?? "Host=localhost;Port=61853;Database=neuralium;Username=postgres;Password=DevelopmentPassword123!";
 
 Console.WriteLine("Adding arXiv sources to Neuralium database...");
@@ -63,7 +63,7 @@ else
 
     await dbContext.FeedSources.AddRangeAsync(arxivSources);
     await dbContext.SaveChangesAsync();
-    
+
     Console.WriteLine($"✓ Successfully added {arxivSources.Length} arXiv sources");
 }
 
