@@ -1,6 +1,12 @@
 -- Add arXiv feed sources to existing database
--- Run this script after database is initialized with existing feed sources
-
+-- 
+-- HOW TO RUN THIS SCRIPT:
+-- 1. Open pgAdmin at http://localhost:61852 (check Aspire dashboard for current port)
+-- 2. Login with: admin@neuralium.local / DevelopmentPassword123!
+-- 3. Navigate to: Servers > postgres-781c9df2 > Databases > neuralium
+-- 4. Right-click on neuralium > Query Tool
+-- 5. Paste this entire script and click Execute (F5)
+--
 -- These will be automatically seeded in future fresh database setups,
 -- but for existing databases they need to be added manually.
 

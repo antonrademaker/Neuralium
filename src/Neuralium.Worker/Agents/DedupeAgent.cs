@@ -37,20 +37,36 @@ public partial class DedupeAgent(
 
         LogFoundExisting(existingHashes.Count);
 
-        // Filter out duplicates
+        // Filter out duplicates (both from database and within batch)
+        var seenHashes = new HashSet<string>(existingHashes);
+        var inBatchDuplicates = 0;
+        
         foreach (var item in input.NormalizedItems)
         {
-            if (!existingHashes.Contains(item.UrlHash))
+            if (!seenHashes.Contains(item.UrlHash))
             {
                 input.UniqueItems.Add(item);
+                seenHashes.Add(item.UrlHash); // Track within batch
             }
             else
             {
-                LogSkippingDuplicate(item.Title, item.Url);
+                if (existingHashes.Contains(item.UrlHash))
+                {
+                    LogSkippingDuplicate(item.Title, item.Url);
+                }
+                else
+                {
+                    inBatchDuplicates++;
+                    LogSkippingBatchDuplicate(item.Title, item.Url);
+                }
             }
         }
 
         var duplicateCount = input.NormalizedItems.Count - input.UniqueItems.Count;
+        if (inBatchDuplicates > 0)
+        {
+            LogInBatchDuplicates(inBatchDuplicates);
+        }
         input.Metadata.StageItemCounts["Dedupe"] = input.UniqueItems.Count;
         LogDedupeCompleted(input.UniqueItems.Count, duplicateCount);
 
@@ -63,8 +79,14 @@ public partial class DedupeAgent(
     [LoggerMessage(Level = LogLevel.Information, Message = "Dedupe: Found {Count} existing items in database")]
     private partial void LogFoundExisting(int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Dedupe: Skipping duplicate '{Title}' ({Url})")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Dedupe: Skipping duplicate from database '{Title}' ({Url})")]
     private partial void LogSkippingDuplicate(string title, string url);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Dedupe: Skipping duplicate within batch '{Title}' ({Url})")]
+    private partial void LogSkippingBatchDuplicate(string title, string url);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Dedupe: Found {Count} duplicates within current batch")]
+    private partial void LogInBatchDuplicates(int count);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Dedupe: Completed with {UniqueCount} unique items ({DuplicateCount} duplicates removed)")]
     private partial void LogDedupeCompleted(int uniqueCount, int duplicateCount);
