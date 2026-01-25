@@ -18,8 +18,17 @@ using Microsoft.Extensions.Logging;
 using Neuralium.Data;
 using Neuralium.Worker;
 using Neuralium.Worker.Agents;
+using Neuralium.Worker.Models;
+using Neuralium.Worker.Services;
+using System.Diagnostics;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+// Configure LLM settings from appsettings
+builder.Services.Configure<LlmSettings>(builder.Configuration.GetSection("Llm"));
+
+// Add ActivitySource for LLM telemetry
+var llmActivitySource = new ActivitySource("Neuralium.Worker.LlmService");
 
 // Add OpenTelemetry for observability
 builder.Services.AddOpenTelemetry()
@@ -33,7 +42,10 @@ builder.Services.AddOpenTelemetry()
         .AddSource("Neuralium.Worker.ClassifyAgent")
         .AddSource("Neuralium.Worker.EnrichAgent")
         .AddSource("Neuralium.Worker.AnalyzeAgent")
-        .AddSource("Neuralium.Worker.PublishAgent"));
+        .AddSource("Neuralium.Worker.PublishAgent")
+        .AddSource("Neuralium.Worker.LlmService"))
+    .WithMetrics(metrics => metrics
+        .AddMeter("Neuralium.Worker.EnrichAgent"));
 
 // Register PostgreSQL DbContext with Aspire integration
 builder.AddNpgsqlDbContext<NeuraliumDbContext>("neuralium");
@@ -41,6 +53,20 @@ builder.AddNpgsqlDbContext<NeuraliumDbContext>("neuralium");
 // Register HttpClient with Polly resilience policies
 builder.Services.AddHttpClient("FeedReader")
     .AddStandardResilienceHandler();
+
+// Register LLM service (singleton for ActivitySource, scoped for service)
+builder.Services.AddSingleton(llmActivitySource);
+
+// Register the appropriate LLM service based on configuration
+var llmProvider = builder.Configuration.GetValue<string>("Llm:Provider") ?? "AzureOpenAI";
+if (llmProvider.Equals("Ollama", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddScoped<ILlmService, OllamaService>();
+}
+else
+{
+    builder.Services.AddScoped<ILlmService, AzureOpenAIService>();
+}
 
 // Register feed providers for different source types
 builder.Services.AddScoped<IFeedProvider, StandardFeedProvider>();

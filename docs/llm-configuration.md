@@ -82,32 +82,42 @@ Can also configure via environment variables (useful for production):
 2. No endpoint needed (uses api.openai.com)
 3. Model names: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
 
-### Local (Future)
+### Ollama (Local Models)
 ```json
 {
   "Llm": {
-    "Provider": "Local",
+    "Provider": "Ollama",
     "Endpoint": "http://localhost:11434",
-    "ModelName": "llama3",
+    "ModelName": "llama3.2",
     "EmbeddingModelName": "nomic-embed-text"
   }
 }
 ```
 
-For Ollama or similar local LLM servers.
+**Setup:**
+1. Install Ollama: https://ollama.com/download
+2. Pull models: `ollama pull llama3.2` and `ollama pull nomic-embed-text`
+3. Start Ollama: `ollama serve` (or it runs automatically)
+4. No API key required for local Ollama
+
+**Available Models:**
+- Chat: llama3.2, llama3.1, phi3:mini, mistral, qwen2.5
+- Embedding: nomic-embed-text, all-minilm
 
 ## Settings Reference
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `Enabled` | bool | false | Master switch for LLM features |
-| `Provider` | string | "AzureOpenAI" | "AzureOpenAI", "OpenAI", or "Local" |
-| `Endpoint` | string? | null | API endpoint URL (Azure OpenAI or custom) |
-| `ApiKey` | string? | null | API authentication key |
+| `Provider` | string | "AzureOpenAI" | "AzureOpenAI", "OpenAI", or "Ollama" |
+| `Endpoint` | string? | null | API endpoint URL (Azure OpenAI, Ollama, or custom) |
+| `ApiKey` | string? | null | API authentication key (not required for Ollama) |
 | `ModelName` | string? | "gpt-4o" | Model for summarization |
 | `EmbeddingModelName` | string? | "text-embedding-3-small" | Model for embeddings |
 | `EnableSummarization` | bool | true | Generate summaries for news items |
 | `EnableEmbeddings` | bool | false | Generate embeddings for semantic search |
+| `MaxSummaryTokens` | int | 150 | Maximum tokens for generated summaries |
+| `Temperature` | float | 0.3 | Temperature for LLM generation (0.0-1.0) |
 | `MaxSummaryTokens` | int | 150 | Maximum tokens in generated summaries |
 | `TimeoutSeconds` | int | 30 | Request timeout |
 | `MaxRetries` | int | 3 | Retry attempts for failed requests |

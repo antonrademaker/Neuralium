@@ -51,6 +51,11 @@ public sealed class LlmSettings
     public int MaxSummaryTokens { get; set; } = 150;
 
     /// <summary>
+    /// Temperature for LLM generation (0.0-1.0, higher = more creative)
+    /// </summary>
+    public float Temperature { get; set; } = 0.3f;
+
+    /// <summary>
     /// Request timeout in seconds
     /// </summary>
     public int TimeoutSeconds { get; set; } = 30;
