@@ -70,7 +70,7 @@ Summary:";
             async () =>
             {
                 var chatClient = _client.GetChatClient(_settings.ModelName);
-                
+
                 var response = await chatClient.CompleteChatAsync(
                     [new UserChatMessage(prompt)],
                     new ChatCompletionOptions
@@ -81,10 +81,10 @@ Summary:";
                     cancellationToken);
 
                 var summary = response.Value.Content[0].Text?.Trim();
-                
+
                 activity?.SetTag("response.tokens", response.Value.Usage.TotalTokenCount);
                 LogSummaryGenerated(response.Value.Usage.TotalTokenCount);
-                
+
                 return summary;
             },
             "summarization",
@@ -118,14 +118,14 @@ Summary:";
             async () =>
             {
                 var embeddingClient = _client.GetEmbeddingClient(_settings.EmbeddingModelName);
-                
+
                 var response = await embeddingClient.GenerateEmbeddingAsync(content, cancellationToken: cancellationToken);
-                
+
                 var embedding = response.Value.ToFloats().ToArray();
-                
+
                 activity?.SetTag("embedding.dimensions", embedding.Length);
                 LogEmbeddingGenerated(embedding.Length);
-                
+
                 return embedding;
             },
             "embedding",
@@ -157,7 +157,7 @@ Summary:";
 
                 var delay = backoffMs * (int)Math.Pow(2, attempt - 1);
                 LogRateLimitRetry(operationName, delay, attempt, MaxRetries);
-                
+
                 await Task.Delay(delay, cancellationToken);
             }
             catch (RequestFailedException ex) when (ex.Status >= 500) // Server error
@@ -171,7 +171,7 @@ Summary:";
 
                 var delay = backoffMs * (int)Math.Pow(2, attempt - 1);
                 LogServerErrorRetry(operationName, delay, attempt, MaxRetries, ex);
-                
+
                 await Task.Delay(delay, cancellationToken);
             }
             catch (OperationCanceledException)

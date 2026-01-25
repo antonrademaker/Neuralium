@@ -136,7 +136,7 @@ Summary:";
             };
 
             var response = await _client.EmbedAsync(request, cancellationToken);
-            
+
             if (response?.Embeddings != null && response.Embeddings.Count > 0)
             {
                 var embedding = response.Embeddings[0];
