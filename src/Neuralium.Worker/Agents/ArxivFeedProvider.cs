@@ -116,7 +116,7 @@ public sealed partial class ArxivFeedProvider(ILogger<ArxivFeedProvider> logger)
                 return segments[^1].TrimEnd('/');
             }
         }
-        catchwd
+        catch
         {
             // Fall through to return URL
         }

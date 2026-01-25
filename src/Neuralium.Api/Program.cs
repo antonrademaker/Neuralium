@@ -1,33 +1,56 @@
-// Neuralium.Api — Read-only HTTP interface
-// Purpose: Provides query access to aggregated news and trends.
-// - Designed for future consumption by dashboards or external tools
-// - No write operations (all data comes from the Worker pipeline)
-// - Minimal API style (no controllers, no ceremony)
+// Neuralium.Api — HTTP API for feedback and queries
+// Purpose: Provides REST endpoints for user feedback and news/trend queries.
+// - POST /api/feedback/newsitem/{id} — Submit thumbs up/down on news items
+// - POST /api/feedback/keyword/{id} — Submit thumbs up/down on keywords
+// - Future GET endpoints for news queries and trends
 //
-// Future endpoints:
-// - GET /news?topic=agents&days=7 — Recent news items
-// - GET /trends?window=7d — Trending topics and entities
-// - GET /digest/latest — Most recent daily digest
+// Uses controllers for complex feedback logic with validation.
+// Future: Add authentication, rate limiting, caching.
+
+using Microsoft.EntityFrameworkCore;
+using Neuralium.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Future: Add services here
-// builder.Services.AddDbContext<NeuraliumDbContext>();
-// builder.Services.AddSingleton<NewsQueryService>();
-// builder.Services.AddSingleton<TrendQueryService>();
+// Add database context
+builder.AddNpgsqlDbContext<NeuraliumDbContext>("neuralium");
+
+// Add controllers for feedback endpoints
+builder.Services.AddControllers();
+
+// Add API documentation (Swagger)
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
+// Enable Swagger in development
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.MapControllers();
 app.MapHealthChecks("/health");
+
+// Available endpoints
+var endpoints = new[]
+{
+    "POST /api/feedback/newsitem/{id} - Submit news item feedback",
+    "POST /api/feedback/keyword/{id} - Submit keyword feedback",
+    "GET /swagger - API documentation"
+};
 
 // Placeholder: Confirm API is running
 app.MapGet("/", () => new
 {
     Service = "Neuralium.Api",
     Status = "Running",
-    Message = "Query endpoints will be added as the pipeline is implemented."
+    Version = "1.0.0",
+    Endpoints = endpoints
 });
 
 app.Run();

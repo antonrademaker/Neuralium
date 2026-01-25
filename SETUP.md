@@ -409,7 +409,7 @@ sudo systemctl list-timers --all  # Verify
 ### Common Issues
 
 **Issue**: "No connection could be made to the database"
-- **Fix**: Ensure PostgreSQL container is running: `docker ps | grep postgres`
+- **Fix**: Ensure PostgreSQL container is running: `podman ps | grep postgres`
 - Check connection string in Aspire Dashboard
 
 **Issue**: "Aspire dashboard won't start"
@@ -456,5 +456,328 @@ sudo systemctl list-timers --all  # Verify
 4. Implement LLM integration with fallback
 5. Add trend detection and analysis
 6. Setup production deployment
+
+---
+
+## 📅 Development Roadmap
+
+### ✅ Phase 1: Core Features (COMPLETED)
+
+#### 1.1 OpenTelemetry Integration ✅
+- ActivitySource tracing across Worker + 7 agents + 2 providers
+- Structured logging with EventIds and categories
+- Dashboard telemetry at https://localhost:15243
+- **Files**: Worker/Program.cs, all Agent classes
+
+#### 1.2 Rate Limiting ✅
+- `MinimumFetchIntervalMinutes` property on FeedSource (default: 60)
+- Enforcement in IngestAgent with remaining time logging
+- arXiv sources configured for 240-minute intervals (4 hours)
+- **Files**: Data/Models/FeedSource.cs, Worker/Agents/IngestAgent.cs
+
+#### 1.3 User Feedback System ✅
+- `NewsItemFeedback` entity with unique constraint (UserId + NewsItemId)
+- `KeywordFeedback` entity with unique constraint (UserId + TopicKeywordId)
+- Database migration applied successfully
+- **Files**: Data/Models/NewsItemFeedback.cs, Data/Models/KeywordFeedback.cs
+- **Migration**: 20260125110235_AddRateLimitingFeedbackAndScoring.cs
+
+#### 1.4 Separated Scoring ✅
+- `NewsItemScore` entity with 4 independent components
+- RecencyScore (7-day decay), TopicScore (keyword count), UserFeedbackScore (aggregated), ComputedTrendScore (weighted: 70/20/10)
+- AnalyzeAgent queries NewsItemFeedback and calculates aggregate scores
+- PublishAgent saves items then scores with proper FK relationships
+- **Files**: Data/Models/NewsItemScore.cs, Worker/Agents/AnalyzeAgent.cs, Worker/Agents/PublishAgent.cs
+
+#### 1.5 arXiv Integration ✅
+- Provider abstraction: IFeedProvider interface
+- StandardFeedProvider (RSS/Atom/GitHub/Reddit/Medium)
+- ArxivFeedProvider (query-based API searches)
+- 3 arXiv sources in seed data (AI Research, Neural Networks, LLMs)
+- Within-batch deduplication fix for overlapping results
+- **Files**: Worker/Agents/IFeedProvider.cs, Worker/Agents/StandardFeedProvider.cs, Worker/Agents/ArxivFeedProvider.cs
+- **Documentation**: docs/arxiv-integration.md
+
+#### 1.6 Feedback API ✅
+- **POST /api/feedback/newsitem/{id}** - Submit news item feedback
+- **POST /api/feedback/keyword/{id}** - Submit keyword feedback
+- FeedbackController with validation, update/create logic, structured logging
+- Swagger documentation at http://localhost:5000/swagger
+- Returns 201 Created, 200 OK, 404 Not Found appropriately
+- **Files**: Api/Controllers/FeedbackController.cs, Api/Models/SubmitFeedbackRequest.cs, Api/Program.cs
+- **Packages**: Swashbuckle.AspNetCore 7.2.0
+
+#### 1.7 LLM Configuration ✅
+- LlmSettings model with comprehensive options
+- appsettings.json Llm section (disabled by default)
+- Documentation: providers (Azure OpenAI, OpenAI, Local), cost estimates, troubleshooting
+- **Files**: Worker/Models/LlmSettings.cs, Worker/appsettings.json
+- **Documentation**: docs/llm-configuration.md
+
+---
+
+### 🔄 Phase 2: LLM Integration (IN PROGRESS)
+
+#### 2.1 Service Interface & Implementation
+**Status**: Not started  
+**Estimated**: 1-2 hours
+
+**Tasks**:
+- [ ] Create `ILlmService` interface in Worker/Services/
+  - `Task<string?> GenerateSummaryAsync(string content, CancellationToken ct)`
+  - `Task<float[]?> GenerateEmbeddingAsync(string content, CancellationToken ct)`
+- [ ] Implement `AzureOpenAIService` or `OpenAIService`
+  - Add NuGet: `Azure.AI.OpenAI` or `Betalgo.OpenAI`
+  - Configure from LlmSettings (Endpoint, ApiKey, ModelName)
+  - Implement retry logic with exponential backoff
+  - Add ActivitySource tracing for LLM calls
+  - Handle rate limits and errors gracefully
+- [ ] Register in Program.cs
+  - `builder.Services.Configure<LlmSettings>(builder.Configuration.GetSection("Llm"))`
+  - `builder.Services.AddScoped<ILlmService, AzureOpenAIService>()`
+  - Conditional registration based on Enabled flag
+
+**Files to Create**:
+- Worker/Services/ILlmService.cs
+- Worker/Services/AzureOpenAIService.cs (or OpenAIService.cs)
+
+**Files to Modify**:
+- Worker/Program.cs (service registration)
+- Directory.Packages.props (add Azure.AI.OpenAI)
+
+#### 2.2 EnrichAgent Integration
+**Status**: Not started  
+**Estimated**: 30 minutes
+
+**Tasks**:
+- [ ] Update EnrichAgent constructor to inject `ILlmService` and `IOptions<LlmSettings>`
+- [ ] Add summarization logic:
+  - Check if LlmSettings.Enabled && EnableSummarization
+  - Call GenerateSummaryAsync for items without summaries
+  - Store result in item.Summary
+  - Log success/failure with item count
+- [ ] Add embedding logic (optional):
+  - Check if LlmSettings.Enabled && EnableEmbeddings
+  - Call GenerateEmbeddingAsync
+  - Store as JSON in item.EmbeddingJson
+- [ ] Handle errors gracefully (continue pipeline if LLM fails)
+
+**Files to Modify**:
+- Worker/Agents/EnrichAgent.cs
+
+#### 2.3 Testing & Validation
+**Status**: Not started  
+**Estimated**: 30 minutes
+
+**Tasks**:
+- [ ] Create appsettings.local.json with test credentials
+- [ ] Enable LLM: Set Enabled=true, configure Endpoint/ApiKey
+- [ ] Run worker with real feed data
+- [ ] Verify summaries generated and saved to database
+- [ ] Check ActivitySource traces in Aspire dashboard
+- [ ] Monitor costs in Azure Portal (if using Azure OpenAI)
+- [ ] Test with Enabled=false (should work as before, no API calls)
+
+---
+
+### 🧪 Phase 3: End-to-End Testing (PENDING)
+
+#### 3.1 Feedback Workflow Test
+**Status**: Not started  
+**Estimated**: 30 minutes
+
+**Tasks**:
+- [ ] Insert test news items via SQL or run worker
+- [ ] Submit feedback via API:
+  ```bash
+  curl -X POST http://localhost:5000/api/feedback/newsitem/1 \
+    -H "Content-Type: application/json" \
+    -d '{"userId":"test-user","feedbackType":"ThumbsUp"}'
+  ```
+- [ ] Verify feedback saved: `SELECT * FROM news_item_feedbacks;`
+- [ ] Run worker again (re-score existing items)
+- [ ] Verify UserFeedbackScore updated in news_item_scores table
+- [ ] Check AnalyzeAgent logs for "Loaded feedback for X of Y items"
+- [ ] Test update scenario (submit opposite feedback, verify 200 OK)
+- [ ] Test keyword feedback endpoint similarly
+
+#### 3.2 Integration Test
+**Status**: Not started  
+**Estimated**: 30 minutes
+
+**Tasks**:
+- [ ] Clear database (restart Aspire or manual DELETE)
+- [ ] Run worker: Full pipeline from scratch
+- [ ] Verify 7 stages complete successfully:
+  - Ingest: All 7 sources (4 RSS + 3 arXiv)
+  - Normalize: All items processed
+  - Dedupe: Database + batch duplicates removed
+  - Classify: Topics assigned
+  - Enrich: Summaries generated (if LLM enabled)
+  - Analyze: Scores calculated with feedback aggregation
+  - Publish: Items + scores saved, Markdown generated
+- [ ] Check output/news-{timestamp}.md
+- [ ] Verify telemetry in Aspire dashboard
+- [ ] Submit feedback, re-run worker, verify scores updated
+
+---
+
+### 📋 Phase 4: Future Enhancements (BACKLOG)
+
+#### 4.1 Query API Endpoints
+**Estimated**: 2-3 hours
+
+- GET /api/news?topic={topic}&days={days} - Recent news items with filtering
+- GET /api/news/{id} - Single news item with full details and score
+- GET /api/trends?window={window} - Trending topics over time window
+- GET /api/keywords - List all classification keywords with feedback stats
+
+**Benefits**:
+- Enable web UI consumption
+- Support external integrations
+- Provide data for analytics
+
+#### 4.2 Web UI
+**Estimated**: 4-6 hours
+
+- Simple frontend for browsing news items (React/Blazor)
+- Thumbs up/down buttons connected to feedback API
+- Display ComputedTrendScore and individual score components
+- Filter by topic, sort by recency/trend score
+- Responsive design for mobile/desktop
+
+**Technology Options**:
+- Blazor Server (integrated with ASP.NET Core)
+- React + Vite (separate SPA)
+- Next.js (SSR for better SEO)
+
+#### 4.3 Advanced Features
+**Estimated**: 8-12 hours
+
+- **Semantic Search**: Use embeddings for vector similarity search
+- **User Preferences**: Per-user topic weights, source filters, notification settings
+- **Email Digest**: Generate and send daily/weekly email summaries
+- **Trend Detection**: 7d vs 30d momentum, entity deltas, cluster growth
+- **Keyword Quality**: Improve keywords based on KeywordFeedback aggregation
+- **Multi-language Support**: Translate summaries, support non-English feeds
+
+#### 4.4 Operational Improvements
+**Estimated**: 4-6 hours
+
+- **Production Deployment**: Docker Compose, Kubernetes manifests, systemd timer
+- **Monitoring Dashboards**: Grafana + Prometheus integration
+- **Alert Rules**: Pipeline failures, high error rates, API quotas
+- **Backup/Restore**: Automated database backups with point-in-time recovery
+- **Performance Optimization**: Parallel processing, Redis caching, database indexing
+- **Security**: Authentication (JWT), authorization (RBAC), rate limiting, HTTPS enforcement
+
+---
+
+## 📊 Current Status Summary
+
+**Completed**: 7 major features (OpenTelemetry, Rate Limiting, Feedback System, Separated Scoring, arXiv Integration, Feedback API, LLM Configuration)
+
+**In Progress**: LLM service implementation (ILlmService + provider implementations)
+
+**Pending**: End-to-end testing (feedback workflow + integration tests)
+
+**Total Estimated Remaining**: 3-4 hours for Phase 2-3
+
+### System Health
+- ✅ **Build**: Successful (1.7s, 0 errors, 0 warnings)
+- ✅ **API**: Running at http://localhost:5000 with Swagger UI
+- ✅ **Database**: Healthy (Postgres + pgAdmin running)
+- ✅ **Worker**: Pipeline tested successfully (70 items → 2 new unique items)
+- ✅ **Dashboard**: http://localhost:15000 (Aspire telemetry)
+
+### Key Metrics
+- **arXiv Integration**: 150 articles fetched across 3 queries, proper deduplication
+- **Feedback API**: 2 endpoints, Swagger documented, 200/201/404 responses
+- **Scoring**: 4 components (recency, topic, feedback, trend), proper FK relationships
+- **Rate Limiting**: 4-hour intervals for arXiv, 1-hour default for RSS feeds
+
+### Next Immediate Steps
+1. **Implement ILlmService + AzureOpenAIService** (~1-2 hrs)
+   - Create interface with summarization and embedding methods
+   - Implement Azure OpenAI integration with retry logic
+   - Register services conditionally based on LlmSettings.Enabled
+2. **Integrate into EnrichAgent** (~30 min)
+   - Inject ILlmService and configuration
+   - Add conditional summarization logic
+   - Handle errors gracefully
+3. **Test Feedback Workflow** (~30 min)
+   - Submit feedback via API
+   - Re-run worker to verify score updates
+   - Validate end-to-end integration
+
+---
+
+## 🔧 Development Commands
+
+### Build & Test
+```bash
+# Build solution
+dotnet build
+
+# Run tests (when added)
+dotnet test
+
+# Clean build artifacts
+dotnet clean
+```
+
+### Run Locally
+```bash
+# Run entire stack with Aspire
+dotnet run --project src/Neuralium.AppHost
+
+# Run worker standalone
+dotnet run --project src/Neuralium.Worker
+
+# Run API standalone
+dotnet run --project src/Neuralium.Api
+```
+
+### Database Operations
+```bash
+# Add new migration
+dotnet ef migrations add MigrationName --project src/Neuralium.Data --startup-project src/Neuralium.MigrationService
+
+# Apply migrations (via Aspire - runs automatically)
+# Or manually:
+dotnet run --project src/Neuralium.MigrationService
+```
+
+### Testing Endpoints
+```bash
+# Check API health
+curl http://localhost:5000/health
+
+# View Swagger UI
+open http://localhost:5000/swagger
+
+# Submit news item feedback
+curl -X POST http://localhost:5000/api/feedback/newsitem/1 \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"test-user","feedbackType":"ThumbsUp"}'
+
+# Submit keyword feedback
+curl -X POST http://localhost:5000/api/feedback/keyword/1 \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"test-user","feedbackType":"ThumbsDown"}'
+```
+
+---
+
+## 📖 Documentation
+
+- **Architecture**: See `/adr` folder for Architecture Decision Records
+- **arXiv Integration**: [docs/arxiv-integration.md](docs/arxiv-integration.md)
+- **LLM Configuration**: [docs/llm-configuration.md](docs/llm-configuration.md)
+- **API Documentation**: http://localhost:5000/swagger (when running)
+- **Copilot Instructions**: [.github/copilot-instructions.md](.github/copilot-instructions.md)
+- **Agents Instructions**: [AGENTS.md](AGENTS.md) (Aspire-specific guidance)
+
+---
 
 **Inspired by**: [Microsoft Agent Framework Workflows Journey](https://singhrajeev.com/2026/01/18/microsoft-agent-framework-workflows-the-next-step-in-building-intelligent-multi-agent-ai-systems/)

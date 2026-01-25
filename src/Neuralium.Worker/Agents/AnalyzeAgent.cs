@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Neuralium.Data;
 using Neuralium.Data.Models;
 using Neuralium.Worker.Models;
@@ -8,13 +9,11 @@ namespace Neuralium.Worker.Agents;
 /// <summary>
 ///Analyzes trends using topic frequency and recency.
 /// Creates separate NewsItemScore records instead of storing scores on NewsItem.
-/// Future: 7d vs 30d momentum, entity deltas, cluster growth, user feedback scoring.
+/// Aggregates user feedback (thumbs up/down) to calculate UserFeedbackScore.
 /// </summary>
-#pragma warning disable IDE0060 // Remove unused parameter - will be used for feedback scoring
 public partial class AnalyzeAgent(
     ILogger<AnalyzeAgent> logger,
     NeuraliumDbContext dbContext) : IAgent<PipelineContext, PipelineContext>
-#pragma warning restore IDE0060
 {
     private static readonly ActivitySource s_activitySource = new("Neuralium.Worker.AnalyzeAgent");
 
@@ -26,8 +25,37 @@ public partial class AnalyzeAgent(
         var now = DateTime.UtcNow;
         var scores = new List<NewsItemScore>();
 
-        // TODO: Use dbContext to query NewsItemFeedback for user feedback scores  
-        _ = dbContext; // Suppress unused parameter warning
+        // For new items (no IDs), feedback score will be 0.0
+        // For existing items being re-scored, query feedback from database
+        var itemsWithIds = input.ClassifiedItems.Where(item => item.Id > 0).ToList();
+        var feedbackScores = new Dictionary<int, double>();
+
+        if (itemsWithIds.Count > 0)
+        {
+            var itemIds = itemsWithIds.Select(item => item.Id).ToList();
+            var feedbacks = await dbContext.NewsItemFeedbacks
+                .Where(f => itemIds.Contains(f.NewsItemId))
+                .GroupBy(f => f.NewsItemId)
+                .Select(g => new
+                {
+                    NewsItemId = g.Key,
+                    ThumbsUp = g.Count(f => f.FeedbackType == "ThumbsUp"),
+                    ThumbsDown = g.Count(f => f.FeedbackType == "ThumbsDown")
+                })
+                .ToListAsync(cancellationToken);
+
+            foreach (var feedback in feedbacks)
+            {
+                var total = feedback.ThumbsUp + feedback.ThumbsDown;
+                if (total > 0)
+                {
+                    // Normalize to -1.0 to 1.0 range
+                    feedbackScores[feedback.NewsItemId] = ((double)feedback.ThumbsUp - feedback.ThumbsDown) / total;
+                }
+            }
+
+            LogFeedbackLoaded(feedbacks.Count, itemIds.Count);
+        }
 
         // Calculate scores for each item
         foreach (var item in input.ClassifiedItems)
@@ -39,9 +67,8 @@ public partial class AnalyzeAgent(
                 item.TopicsJson.Count(c => c == ',') + 1; // Simple count
             var topicScore = Math.Min(topicCount / 3.0, 1.0); // Cap at 3 topics
 
-            // Calculate user feedback score (will be 0 for new items without feedback)
-            // TODO: Query NewsItemFeedback via dbContext to calculate feedback score
-            var userFeedbackScore = 0.0;
+            // Get user feedback score (0.0 for new items, calculated for existing items with feedback)
+            feedbackScores.TryGetValue(item.Id, out var userFeedbackScore);
             var computedTrendScore = (recencyScore * 0.7) + (topicScore * 0.2) + (userFeedbackScore * 0.1);
 
             // Set legacy TrendScore for backward compatibility
@@ -78,4 +105,7 @@ public partial class AnalyzeAgent(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Analyze: Completed trend analysis for {Count} items")]
     private partial void LogAnalyzeCompleted(int count);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Analyze: Loaded feedback for {FeedbackCount} of {ItemCount} items")]
+    private partial void LogFeedbackLoaded(int feedbackCount, int itemCount);
 }
