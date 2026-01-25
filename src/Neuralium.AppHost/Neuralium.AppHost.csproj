@@ -1,0 +1,18 @@
+﻿<Project Sdk="Aspire.AppHost.Sdk/13.1.0">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>5e9c4518-275a-4570-8936-7b6abe025aff</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Neuralium.MigrationService\Neuralium.MigrationService.csproj" />
+    <ProjectReference Include="..\Neuralium.Worker\Neuralium.Worker.csproj" />
+    <ProjectReference Include="..\Neuralium.Api\Neuralium.Api.csproj" />
+  </ItemGroup>
+
+</Project>

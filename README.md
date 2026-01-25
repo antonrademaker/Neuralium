@@ -57,30 +57,101 @@ Neuralium is built with the following principles:
 
 ## 🏗️ Architecture (High-Level)
 
-Neuralium follows a clear pipeline:
+Neuralium follows an **agent-based workflow architecture** inspired by [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/):
 
-1. **Ingest** – Fetch items from configured feeds  
-2. **Normalize** – Canonical URLs, timestamps, source identity  
-3. **Deduplicate** – Prevent cross-source duplication  
-4. **Classify** – Topic tagging (keyword-first, optional LLM)  
-5. **Enrich** – Summaries, entities, embeddings (optional)  
-6. **Analyze** – Trend detection (7d vs 30d momentum)  
-7. **Publish** – Daily digest and trend report
+**Pipeline Stages** (Each stage is an autonomous agent):
 
-The system runs as a **one-shot worker** in a Linux container, scheduled externally (e.g. systemd timer).
+1. **Ingest Agent** – Fetch items from configured feeds  
+2. **Normalize Agent** – Canonical URLs, timestamps, source identity  
+3. **Dedupe Agent** – Prevent cross-source duplication  
+4. **Classify Agent** – Topic tagging (hybrid: keywords + optional LLM)  
+5. **Enrich Agent** – Summaries, entities, embeddings (optional)  
+6. **Analyze Agent** – Trend detection (7d vs 30d momentum)  
+7. **Publish Agent** – Daily digest and trend report
+
+**Orchestration Pattern**: Workflow-as-Agent with sequential execution (see [ADR-0001](adr/0001-agent-workflow-orchestration.md))
+
+The system runs as a **Worker Service** orchestrated by .NET Aspire, triggered daily via systemd timer or manually for development.
+
+For detailed architecture decisions, see the [/adr](adr/) folder.
 
 ---
 
 ## ⚙️ Technology Stack
 
-- **Language:** C# (.NET)
+- **Language:** C# (.NET 10)
 - **Runtime:** Linux containers (Podman)
-- **Execution:** Daily worker (non-interactive)
-- **Storage:** SQLite (dev) / PostgreSQL (prod)
-- **Configuration:** YAML + environment variables
-- **Development:** VS Code + GitHub Copilot
+- **Orchestration:** .NET Aspire
+- **Execution:** Worker Service (scheduled via systemd timer)
+- **Storage:** PostgreSQL (dev & prod) with Aspire.Npgsql integration
+- **Configuration:** appsettings.json + environment variables
+- **AI/LLM:** Optional hybrid classification (keywords + LLM refinement)
+- **Development:** VS Code + C# Dev Kit + GitHub Copilot
 
 Neuralium is intentionally **cloud-agnostic** and runs fully locally.
+
+**Ke� Getting Started
+
+See **[SETUP.md](SETUP.md)** for complete setup instructions with tiny, validated steps.
+
+**Quick Start** (after prerequisites):
+```bash
+# Clone repository
+git clone https://github.com/your-username/neuralium.git
+cd neuralium
+
+# Restore packages
+dotnet restore
+
+# Run with Aspire (starts Worker + API + PostgreSQL)
+cd src/Neuralium.AppHost
+dotnet run
+# or: aspire run
+
+# View Aspire Dashboard (opens automatically)
+# https://localhost:15243
+```
+
+**Prerequisites**:
+- .NET 10 SDK
+- Docker Desktop or Podman
+- VS Code with C# Dev Kit (recommended)
+
+**Architecture Decisions**:
+See [/adr](adr/) folder for detailed architectural decision records covering:
+- Agent-based workflow orchestration
+- Hybrid LLM classification strategy
+- PostgreSQL production-ready storage
+- Aspire Worker Service execution model
+
+---
+
+## 📁 Project Structure
+
+```
+Neuralium/
+├── adr/                          # Architecture Decision Records
+│   ├── 0001-agent-workflow-orchestration.md
+│   ├── 0002-hybrid-llm-classification.md
+│   ├── 0003-postgresql-production-ready-storage.md
+│   └── 0004-aspire-worker-service-execution.md
+├── src/
+│   ├── Neuralium.AppHost/        # Aspire orchestration
+│   ├── Neuralium.Worker/         # Pipeline agents & execution
+│   └── Neuralium.Api/            # Read-only query API (future)
+├── SETUP.md                      # Detailed setup guide
+├── README.md                     # This file
+└── LICENSE                       # BSD 3-Clause
+
+```
+
+---
+
+## �y Integrations**:
+- [Aspire.Hosting.PostgreSQL](https://learn.microsoft.com/en-us/dotnet/aspire/database/postgresql-integration) for database
+- [Aspire.Npgsql](https://learn.microsoft.com/en-us/dotnet/aspire/database/postgresql-component) for data access
+- Entity Framework Core for ORM
+- OpenTelemetry for observability
 
 ---
 

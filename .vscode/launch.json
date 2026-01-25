@@ -1,0 +1,46 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "aspire",
+            "request": "launch",
+            "name": "Aspire: Launch default apphost",
+            "program": "${workspaceFolder}"
+        },
+        {
+            "name": "Run Worker (Standalone)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Neuralium.Worker/bin/Debug/net10.0/Neuralium.Worker.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Neuralium.Worker",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development"
+            }
+        },
+        {
+            "name": "Run Api (Standalone)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Neuralium.Api/bin/Debug/net10.0/Neuralium.Api.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/Neuralium.Api",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_URLS": "http://localhost:5000"
+            }
+        },
+        {
+            "name": "Attach to Process",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ],
+    "compounds": []
+}
