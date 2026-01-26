@@ -5,5 +5,8 @@
     <Project Path="src/Neuralium.Data/Neuralium.Data.csproj" />
     <Project Path="src/Neuralium.MigrationService/Neuralium.MigrationService.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Neuralium.Tests/Neuralium.Tests.csproj" />
+  </Folder>
   <Project Path="src\Neuralium.Api\Neuralium.Api.csproj" />
 </Solution>

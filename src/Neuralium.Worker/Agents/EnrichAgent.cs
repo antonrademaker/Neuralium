@@ -18,19 +18,19 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
 {
     private static readonly ActivitySource s_activitySource = new("Neuralium.Worker.EnrichAgent");
     private static readonly Meter s_meter = new("Neuralium.Worker.EnrichAgent", "1.0.0");
-        
+
     private static readonly Counter<int> s_summariesGenerated = s_meter.CreateCounter<int>(
         "neuralium.enrich.summaries_generated",
         description: "Total number of summaries generated");
-        
+
     private static readonly Counter<int> s_embeddingsGenerated = s_meter.CreateCounter<int>(
         "neuralium.enrich.embeddings_generated",
         description: "Total number of embeddings generated");
-        
+
     private static readonly Counter<int> s_enrichmentErrors = s_meter.CreateCounter<int>(
         "neuralium.enrich.errors",
         description: "Total number of enrichment errors");
-    
+
     private readonly ILogger<EnrichAgent> _logger;
     private readonly ILlmService _llmService;
     private readonly LlmSettings _llmSettings;
@@ -50,13 +50,13 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
         _llmService = llmService;
         _llmSettings = llmSettings.Value;
         _dbContext = dbContext;
-        
+
         // Register observable gauges with callbacks
         _itemsMissingSummaries = s_meter.CreateObservableGauge(
             "neuralium.enrich.items_missing_summaries",
             () => GetItemsMissingSummariesCount(),
             description: "Number of items in database missing LLM summaries");
-            
+
         _itemsMissingEmbeddings = s_meter.CreateObservableGauge(
             "neuralium.enrich.items_missing_embeddings",
             () => GetItemsMissingEmbeddingsCount(),
@@ -67,7 +67,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     {
         if (!_llmSettings.Enabled || !_llmSettings.EnableSummarization)
             return 0;
-            
+
         try
         {
             return _dbContext.NewsItems
@@ -85,7 +85,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     {
         if (!_llmSettings.Enabled || !_llmSettings.EnableEmbeddings)
             return 0;
-            
+
         try
         {
             return _dbContext.NewsItems
@@ -106,7 +106,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
 
         // First, backfill any items from the database that are missing enrichments
         var backfillStats = await BackfillMissingEnrichmentsAsync(cancellationToken);
-        
+
         LogEnrichStarting(input.ClassifiedItems.Count, _llmSettings.Enabled, backfillStats.ItemsProcessed);
 
         var summariesGenerated = backfillStats.SummariesGenerated;
@@ -161,6 +161,12 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
             }
         }
 
+        // Save changes to database
+        if (summariesGenerated > 0 || embeddingsGenerated > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
         input.Metadata.StageItemCounts["Enrich"] = input.ClassifiedItems.Count;
         activity?.SetTag("summaries.generated", summariesGenerated);
         activity?.SetTag("embeddings.generated", embeddingsGenerated);
@@ -182,7 +188,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     private async Task<BackfillStats> BackfillMissingEnrichmentsAsync(CancellationToken cancellationToken)
     {
         var stats = new BackfillStats();
-        
+
         if (!_llmSettings.Enabled)
         {
             return stats;
@@ -191,7 +197,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
         const int batchSize = 100;
 
         try
-        {            
+        {
             // Find items missing summaries (if summarization is enabled)
             if (_llmSettings.EnableSummarization)
             {
@@ -273,7 +279,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                     .Take(batchSize)
                     .Select(i => i.Id)
                     .ToListAsync(cancellationToken);
-                    
+
                 var uniqueItemsProcessed = itemsMissingEmbeddings
                     .Select(i => i.Id)
                     .Except(existingSummaryIds)
