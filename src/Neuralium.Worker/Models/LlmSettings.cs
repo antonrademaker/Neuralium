@@ -41,6 +41,13 @@ public sealed class LlmSettings
     public bool EnableSummarization { get; set; } = true;
 
     /// <summary>
+    /// Current version of the summarization algorithm.
+    /// Increment this when making improvements (e.g., adding article fetching) to force regeneration.
+    /// Version 0 = original (RSS only), Version 1 = with article fetching
+    /// </summary>
+    public int CurrentSummaryVersion { get; set; } = 1;
+
+    /// <summary>
     /// Enable embeddings for semantic search
     /// </summary>
     public bool EnableEmbeddings { get; set; }

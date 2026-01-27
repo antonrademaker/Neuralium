@@ -40,27 +40,32 @@ public sealed class NewsItem
     public DateTime IngestedAtUtc { get; set; }
 
     /// <summary>
-    /// Optional LLM-generated summary
+    /// Optional LLM-generated summary (no length constraint)
     /// </summary>
-    [MaxLength(1000)]
     public string? Summary { get; set; }
 
     /// <summary>
-    /// Raw content from feed (truncated to first ~500 chars)
+    /// Version of the summary generation algorithm. Used to identify outdated summaries
+    /// that need regeneration (e.g., after improving article fetching).
+    /// Version 0 = original (RSS content only), Version 1 = with article fetching
     /// </summary>
-    [MaxLength(2000)]
+    public int SummaryVersion { get; set; }
+
+    /// <summary>
+    /// Raw content from feed (no length constraint)
+    /// </summary>
     public string? RawContent { get; set; }
 
     /// <summary>
     /// JSON array of classification labels (e.g., ["AI", "Azure", ".NET"])
     /// </summary>
-    [MaxLength(500)]
+    [MaxLength(2000)]
     public string? TopicsJson { get; set; }
 
     /// <summary>
     /// JSON array of extracted entities (e.g., ["ChatGPT", "Microsoft", "C#"])
     /// </summary>
-    [MaxLength(1000)]
+    [MaxLength(5000)]
     public string? EntitiesJson { get; set; }
 
     /// <summary>

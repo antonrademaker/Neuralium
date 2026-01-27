@@ -13,6 +13,7 @@
 // 6. Analyze: Trend detection (7d vs 30d momentum)
 // 7. Publish: Markdown output
 
+using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Neuralium.Data;
@@ -20,7 +21,6 @@ using Neuralium.Worker;
 using Neuralium.Worker.Agents;
 using Neuralium.Worker.Models;
 using Neuralium.Worker.Services;
-using System.Diagnostics;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -54,6 +54,9 @@ builder.AddNpgsqlDbContext<NeuraliumDbContext>("neuralium");
 builder.Services.AddHttpClient("FeedReader")
     .AddStandardResilienceHandler();
 
+builder.Services.AddHttpClient("ArticleFetcher")
+    .AddStandardResilienceHandler();
+
 // Register LLM service (singleton for ActivitySource, scoped for service)
 builder.Services.AddSingleton(llmActivitySource);
 
@@ -67,6 +70,9 @@ else
 {
     builder.Services.AddScoped<ILlmService, AzureOpenAIService>();
 }
+
+// Register article fetcher service
+builder.Services.AddScoped<IArticleFetcherService, ArticleFetcherService>();
 
 // Register feed providers for different source types
 builder.Services.AddScoped<IFeedProvider, StandardFeedProvider>();

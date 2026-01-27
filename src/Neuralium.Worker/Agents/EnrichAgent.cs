@@ -35,6 +35,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     private readonly ILlmService _llmService;
     private readonly LlmSettings _llmSettings;
     private readonly NeuraliumDbContext _dbContext;
+    private readonly IArticleFetcherService _articleFetcher;
 
     // Metrics for tracking enrichment status (initialized in constructor with callbacks)
     private ObservableGauge<int>? _itemsMissingSummaries;
@@ -44,12 +45,14 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
         ILogger<EnrichAgent> logger,
         ILlmService llmService,
         IOptions<LlmSettings> llmSettings,
-        NeuraliumDbContext dbContext)
+        NeuraliumDbContext dbContext,
+        IArticleFetcherService articleFetcher)
     {
         _logger = logger;
         _llmService = llmService;
         _llmSettings = llmSettings.Value;
         _dbContext = dbContext;
+        _articleFetcher = articleFetcher;
 
         // Register observable gauges with callbacks
         _itemsMissingSummaries = s_meter.CreateObservableGauge(
@@ -113,58 +116,92 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
         var embeddingsGenerated = backfillStats.EmbeddingsGenerated;
         var errors = backfillStats.Errors;
 
-        // Process each item for enrichment
-        foreach (var item in input.ClassifiedItems)
+        // Process items in batches of 10 for better resilience
+        const int batchSize = 10;
+        var itemBatches = input.ClassifiedItems
+            .Select((item, index) => new { item, index })
+            .GroupBy(x => x.index / batchSize)
+            .Select(g => g.Select(x => x.item).ToList())
+            .ToList();
+
+        foreach (var batch in itemBatches)
         {
-            try
+            var batchSummaries = 0;
+            var batchEmbeddings = 0;
+
+            // Process each item in the batch
+            foreach (var item in batch)
             {
-                // Generate summary if enabled and not already present
-                if (_llmSettings.Enabled && _llmSettings.EnableSummarization && string.IsNullOrEmpty(item.Summary))
+                try
                 {
-                    var content = $"{item.Title}\n\n{item.RawContent ?? string.Empty}".Trim();
-                    if (!string.IsNullOrEmpty(content))
+                    // Generate summary if enabled and (missing or outdated version)
+                    var needsSummary = string.IsNullOrEmpty(item.Summary) ||
+                                      item.SummaryVersion < _llmSettings.CurrentSummaryVersion;
+
+                    if (_llmSettings.Enabled && _llmSettings.EnableSummarization && needsSummary)
                     {
-                        var summary = await _llmService.GenerateSummaryAsync(content, cancellationToken);
-                        if (!string.IsNullOrEmpty(summary))
+                        // Check if content is insufficient and try to fetch full article
+                        var contentToSummarize = item.RawContent;
+                        if (_articleFetcher.IsInsufficientContent(item.RawContent))
                         {
-                            item.Summary = summary;
-                            summariesGenerated++;
-                            s_summariesGenerated.Add(1);
-                            LogSummaryGenerated(item.Title);
+                            LogFetchingFullArticle(item.Title);
+                            var fetchedContent = await _articleFetcher.FetchArticleContentAsync(item.Url, cancellationToken);
+                            if (!string.IsNullOrWhiteSpace(fetchedContent))
+                            {
+                                contentToSummarize = fetchedContent;
+                                LogFetchedArticleContent(item.Title, fetchedContent.Length);
+                            }
+                        }
+
+                        var content = $"{item.Title}\n\n{contentToSummarize ?? string.Empty}".Trim();
+                        if (!string.IsNullOrEmpty(content))
+                        {
+                            var summary = await _llmService.GenerateSummaryAsync(content, cancellationToken);
+                            if (!string.IsNullOrEmpty(summary))
+                            {
+                                item.Summary = summary;
+                                item.SummaryVersion = _llmSettings.CurrentSummaryVersion;
+                                summariesGenerated++;
+                                batchSummaries++;
+                                s_summariesGenerated.Add(1);
+                                LogSummaryGenerated(item.Title);
+                            }
+                        }
+                    }
+
+                    // Generate embedding if enabled and not already present
+                    if (_llmSettings.Enabled && _llmSettings.EnableEmbeddings && string.IsNullOrEmpty(item.EmbeddingJson))
+                    {
+                        var content = $"{item.Title}\n\n{item.Summary ?? item.RawContent ?? string.Empty}".Trim();
+                        if (!string.IsNullOrEmpty(content))
+                        {
+                            var embedding = await _llmService.GenerateEmbeddingAsync(content, cancellationToken);
+                            if (embedding != null && embedding.Length > 0)
+                            {
+                                item.EmbeddingJson = JsonSerializer.Serialize(embedding);
+                                embeddingsGenerated++;
+                                batchEmbeddings++;
+                                s_embeddingsGenerated.Add(1);
+                                LogEmbeddingGenerated(item.Title, embedding.Length);
+                            }
                         }
                     }
                 }
-
-                // Generate embedding if enabled and not already present
-                if (_llmSettings.Enabled && _llmSettings.EnableEmbeddings && string.IsNullOrEmpty(item.EmbeddingJson))
+                catch (Exception ex)
                 {
-                    var content = $"{item.Title}\n\n{item.Summary ?? item.RawContent ?? string.Empty}".Trim();
-                    if (!string.IsNullOrEmpty(content))
-                    {
-                        var embedding = await _llmService.GenerateEmbeddingAsync(content, cancellationToken);
-                        if (embedding != null && embedding.Length > 0)
-                        {
-                            item.EmbeddingJson = JsonSerializer.Serialize(embedding);
-                            embeddingsGenerated++;
-                            s_embeddingsGenerated.Add(1);
-                            LogEmbeddingGenerated(item.Title, embedding.Length);
-                        }
-                    }
+                    errors++;
+                    s_enrichmentErrors.Add(1);
+                    LogEnrichmentError(item.Title, ex.Message);
+                    // Continue processing other items even if one fails
                 }
             }
-            catch (Exception ex)
-            {
-                errors++;
-                s_enrichmentErrors.Add(1);
-                LogEnrichmentError(item.Title, ex.Message);
-                // Continue processing other items even if one fails
-            }
-        }
 
-        // Save changes to database
-        if (summariesGenerated > 0 || embeddingsGenerated > 0)
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            // Save batch to database
+            if (batchSummaries > 0 || batchEmbeddings > 0)
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                LogBatchSaved(batch.Count, batchSummaries, batchEmbeddings);
+            }
         }
 
         input.Metadata.StageItemCounts["Enrich"] = input.ClassifiedItems.Count;
@@ -183,7 +220,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
 
     /// <summary>
     /// Backfills missing summaries and embeddings for items from previous pipeline runs.
-    /// Processes up to 100 items per run to avoid overwhelming the system.
+    /// Processes ALL items that need enrichment, in batches of 10 for better resilience.
     /// </summary>
     private async Task<BackfillStats> BackfillMissingEnrichmentsAsync(CancellationToken cancellationToken)
     {
@@ -194,103 +231,161 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
             return stats;
         }
 
-        const int batchSize = 100;
+        const int batchSize = 10;
 
         try
         {
-            // Find items missing summaries (if summarization is enabled)
+            // Process items missing summaries OR with outdated versions (if summarization is enabled)
             if (_llmSettings.EnableSummarization)
             {
-                var itemsMissingSummaries = await _dbContext.NewsItems
-                    .Where(item => item.Summary == null || item.Summary == string.Empty)
-                    .Where(item => item.RawContent != null && item.RawContent != string.Empty)
-                    .OrderBy(item => item.PublishedAtUtc)
-                    .Take(batchSize)
-                    .ToListAsync(cancellationToken);
-
-                foreach (var item in itemsMissingSummaries)
+                bool hasMoreSummaries = true;
+                while (hasMoreSummaries)
                 {
-                    try
+                    var itemsMissingSummaries = await _dbContext.NewsItems
+                        .Where(item => (item.Summary == null || item.Summary == string.Empty) ||
+                                      item.SummaryVersion < _llmSettings.CurrentSummaryVersion)
+                        .Where(item => item.RawContent != null && item.RawContent != string.Empty)
+                        .OrderBy(item => item.PublishedAtUtc)
+                        .Take(batchSize)
+                        .ToListAsync(cancellationToken);
+
+                    if (itemsMissingSummaries.Count == 0)
                     {
-                        var content = $"{item.Title}\n\n{item.RawContent ?? string.Empty}".Trim();
-                        if (!string.IsNullOrEmpty(content))
+                        hasMoreSummaries = false;
+                        break;
+                    }
+
+                    var batchSummaries = 0;
+                    foreach (var item in itemsMissingSummaries)
+                    {
+                        try
                         {
-                            var summary = await _llmService.GenerateSummaryAsync(content, cancellationToken);
-                            if (!string.IsNullOrEmpty(summary))
+                            // Check if content is insufficient and try to fetch full article
+                            var contentToSummarize = item.RawContent;
+                            if (_articleFetcher.IsInsufficientContent(item.RawContent))
                             {
-                                item.Summary = summary;
-                                stats.SummariesGenerated++;
-                                s_summariesGenerated.Add(1);
-                                LogBackfillSummaryGenerated(item.Title);
+                                LogBackfillFetchingArticle(item.Title);
+                                var fetchedContent = await _articleFetcher.FetchArticleContentAsync(item.Url, cancellationToken);
+                                if (!string.IsNullOrWhiteSpace(fetchedContent))
+                                {
+                                    contentToSummarize = fetchedContent;
+                                    LogBackfillFetchedContent(item.Title, fetchedContent.Length);
+                                }
+                            }
+
+                            var content = $"{item.Title}\n\n{contentToSummarize ?? string.Empty}".Trim();
+                            if (!string.IsNullOrEmpty(content))
+                            {
+                                var summary = await _llmService.GenerateSummaryAsync(content, cancellationToken);
+                                if (!string.IsNullOrEmpty(summary))
+                                {
+                                    item.Summary = summary;
+                                    item.SummaryVersion = _llmSettings.CurrentSummaryVersion;
+                                    stats.SummariesGenerated++;
+                                    batchSummaries++;
+                                    s_summariesGenerated.Add(1);
+                                    LogBackfillSummaryGenerated(item.Title);
+                                }
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            stats.Errors++;
+                            s_enrichmentErrors.Add(1);
+                            LogBackfillError(item.Title, "summary", ex.Message);
+                        }
                     }
-                    catch (Exception ex)
+
+                    stats.ItemsProcessed += itemsMissingSummaries.Count;
+
+                    // Save summary batch
+                    if (batchSummaries > 0)
                     {
-                        stats.Errors++;
-                        s_enrichmentErrors.Add(1);
-                        LogBackfillError(item.Title, "summary", ex.Message);
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        LogBackfillBatchSaved("summaries", batchSummaries);
+                    }
+
+                    // Stop if we got fewer items than batch size (no more items to process)
+                    if (itemsMissingSummaries.Count < batchSize)
+                    {
+                        hasMoreSummaries = false;
                     }
                 }
-
-                stats.ItemsProcessed += itemsMissingSummaries.Count;
             }
 
-            // Find items missing embeddings (if embeddings are enabled)
+            // Process items missing embeddings (if embeddings are enabled)
             if (_llmSettings.EnableEmbeddings)
             {
-                var itemsMissingEmbeddings = await _dbContext.NewsItems
-                    .Where(item => item.EmbeddingJson == null || item.EmbeddingJson == string.Empty)
-                    .Where(item => (item.Summary != null && item.Summary != string.Empty) ||
-                                   (item.RawContent != null && item.RawContent != string.Empty))
-                    .OrderBy(item => item.PublishedAtUtc)
-                    .Take(batchSize)
-                    .ToListAsync(cancellationToken);
+                bool hasMoreEmbeddings = true;
+                var processedIds = new HashSet<int>();
 
-                foreach (var item in itemsMissingEmbeddings)
+                while (hasMoreEmbeddings)
                 {
-                    try
+                    var itemsMissingEmbeddings = await _dbContext.NewsItems
+                        .Where(item => item.EmbeddingJson == null || item.EmbeddingJson == string.Empty)
+                        .Where(item => (item.Summary != null && item.Summary != string.Empty) ||
+                                       (item.RawContent != null && item.RawContent != string.Empty))
+                        .OrderBy(item => item.PublishedAtUtc)
+                        .Take(batchSize)
+                        .ToListAsync(cancellationToken);
+
+                    if (itemsMissingEmbeddings.Count == 0)
                     {
-                        var content = $"{item.Title}\n\n{item.Summary ?? item.RawContent ?? string.Empty}".Trim();
-                        if (!string.IsNullOrEmpty(content))
+                        hasMoreEmbeddings = false;
+                        break;
+                    }
+
+                    var batchEmbeddings = 0;
+                    foreach (var item in itemsMissingEmbeddings)
+                    {
+                        try
                         {
-                            var embedding = await _llmService.GenerateEmbeddingAsync(content, cancellationToken);
-                            if (embedding != null && embedding.Length > 0)
+                            var content = $"{item.Title}\n\n{item.Summary ?? item.RawContent ?? string.Empty}".Trim();
+                            if (!string.IsNullOrEmpty(content))
                             {
-                                item.EmbeddingJson = JsonSerializer.Serialize(embedding);
-                                stats.EmbeddingsGenerated++;
-                                s_embeddingsGenerated.Add(1);
-                                LogBackfillEmbeddingGenerated(item.Title, embedding.Length);
+                                var embedding = await _llmService.GenerateEmbeddingAsync(content, cancellationToken);
+                                if (embedding != null && embedding.Length > 0)
+                                {
+                                    item.EmbeddingJson = JsonSerializer.Serialize(embedding);
+                                    stats.EmbeddingsGenerated++;
+                                    batchEmbeddings++;
+                                    s_embeddingsGenerated.Add(1);
+                                    LogBackfillEmbeddingGenerated(item.Title, embedding.Length);
+                                }
+                            }
+
+                            // Track unique items to avoid double-counting
+                            if (!processedIds.Contains(item.Id))
+                            {
+                                processedIds.Add(item.Id);
+                                stats.ItemsProcessed++;
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            stats.Errors++;
+                            s_enrichmentErrors.Add(1);
+                            LogBackfillError(item.Title, "embedding", ex.Message);
+                        }
                     }
-                    catch (Exception ex)
+
+                    // Save embedding batch
+                    if (batchEmbeddings > 0)
                     {
-                        stats.Errors++;
-                        s_enrichmentErrors.Add(1);
-                        LogBackfillError(item.Title, "embedding", ex.Message);
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        LogBackfillBatchSaved("embeddings", batchEmbeddings);
+                    }
+
+                    // Stop if we got fewer items than batch size (no more items to process)
+                    if (itemsMissingEmbeddings.Count < batchSize)
+                    {
+                        hasMoreEmbeddings = false;
                     }
                 }
-
-                // Only count unique items (some might need both summary and embedding)
-                var existingSummaryIds = await _dbContext.NewsItems
-                    .Where(item => item.Summary == null || item.Summary == string.Empty)
-                    .Where(item => item.RawContent != null && item.RawContent != string.Empty)
-                    .Take(batchSize)
-                    .Select(i => i.Id)
-                    .ToListAsync(cancellationToken);
-
-                var uniqueItemsProcessed = itemsMissingEmbeddings
-                    .Select(i => i.Id)
-                    .Except(existingSummaryIds)
-                    .Count();
-                stats.ItemsProcessed += uniqueItemsProcessed;
             }
 
-            // Save changes to database
-            if (stats.SummariesGenerated > 0 || stats.EmbeddingsGenerated > 0)
+            if (stats.ItemsProcessed > 0)
             {
-                await _dbContext.SaveChangesAsync(cancellationToken);
                 LogBackfillCompleted(stats.ItemsProcessed, stats.SummariesGenerated, stats.EmbeddingsGenerated);
             }
         }
@@ -325,6 +420,9 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     [LoggerMessage(Level = LogLevel.Information, Message = "Enrich: Completed - {TotalCount} items, {Summaries} summaries, {Embeddings} embeddings, {Errors} errors")]
     private partial void LogEnrichCompleted(int totalCount, int summaries, int embeddings, int errors);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Saved batch: {BatchSize} items ({Summaries} summaries, {Embeddings} embeddings)")]
+    private partial void LogBatchSaved(int batchSize, int summaries, int embeddings);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Generated summary for: {Title}")]
     private partial void LogBackfillSummaryGenerated(string title);
 
@@ -337,6 +435,21 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     [LoggerMessage(Level = LogLevel.Information, Message = "Backfill: Completed - {ItemCount} items, {Summaries} summaries, {Embeddings} embeddings")]
     private partial void LogBackfillCompleted(int itemCount, int summaries, int embeddings);
 
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Saved batch of {Type} ({Count} items)")]
+    private partial void LogBackfillBatchSaved(string type, int count);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Backfill: Failed to process items: {Error}")]
     private partial void LogBackfillFailed(string error);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Fetching full article content for: {Title}")]
+    private partial void LogFetchingFullArticle(string title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Fetched article content for '{Title}' ({Length} chars)")]
+    private partial void LogFetchedArticleContent(string title, int length);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Fetching article for: {Title}")]
+    private partial void LogBackfillFetchingArticle(string title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Backfill: Fetched article for '{Title}' ({Length} chars)")]
+    private partial void LogBackfillFetchedContent(string title, int length);
 }

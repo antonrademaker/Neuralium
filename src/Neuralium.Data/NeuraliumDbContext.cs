@@ -42,10 +42,9 @@ public class NeuraliumDbContext : DbContext
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.Url).HasMaxLength(2000);
             entity.Property(e => e.UrlHash).HasMaxLength(64).IsFixedLength();
-            entity.Property(e => e.Summary).HasMaxLength(1000);
-            entity.Property(e => e.RawContent).HasMaxLength(2000);
-            entity.Property(e => e.TopicsJson).HasMaxLength(500);
-            entity.Property(e => e.EntitiesJson).HasMaxLength(1000);
+            // Summary and RawContent have no length constraints (use text type)
+            entity.Property(e => e.TopicsJson).HasMaxLength(2000);
+            entity.Property(e => e.EntitiesJson).HasMaxLength(5000);
             entity.Property(e => e.PublishedAtUtc).HasColumnType("timestamp with time zone");
             entity.Property(e => e.IngestedAtUtc).HasColumnType("timestamp with time zone");
         });

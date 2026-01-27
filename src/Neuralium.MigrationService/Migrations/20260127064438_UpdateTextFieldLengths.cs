@@ -1,0 +1,102 @@
+﻿using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace Neuralium.MigrationService.Migrations
+{
+    /// <inheritdoc />
+    public partial class UpdateTextFieldLengths : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.AlterColumn<string>(
+                name: "TopicsJson",
+                table: "news_items",
+                type: "character varying(2000)",
+                maxLength: 2000,
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "character varying(500)",
+                oldMaxLength: 500,
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "Summary",
+                table: "news_items",
+                type: "text",
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "character varying(1000)",
+                oldMaxLength: 1000,
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "RawContent",
+                table: "news_items",
+                type: "text",
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "character varying(2000)",
+                oldMaxLength: 2000,
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "EntitiesJson",
+                table: "news_items",
+                type: "character varying(5000)",
+                maxLength: 5000,
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "character varying(1000)",
+                oldMaxLength: 1000,
+                oldNullable: true);
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.AlterColumn<string>(
+                name: "TopicsJson",
+                table: "news_items",
+                type: "character varying(500)",
+                maxLength: 500,
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "character varying(2000)",
+                oldMaxLength: 2000,
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "Summary",
+                table: "news_items",
+                type: "character varying(1000)",
+                maxLength: 1000,
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "text",
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "RawContent",
+                table: "news_items",
+                type: "character varying(2000)",
+                maxLength: 2000,
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "text",
+                oldNullable: true);
+
+            migrationBuilder.AlterColumn<string>(
+                name: "EntitiesJson",
+                table: "news_items",
+                type: "character varying(1000)",
+                maxLength: 1000,
+                nullable: true,
+                oldClrType: typeof(string),
+                oldType: "character varying(5000)",
+                oldMaxLength: 5000,
+                oldNullable: true);
+        }
+    }
+}

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Neuralium.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Neuralium.MigrationService.Migrations
 {
     [DbContext(typeof(NeuraliumDbContext))]
-    partial class NeuraliumDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260127064438_UpdateTextFieldLengths")]
+    partial class UpdateTextFieldLengths
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -137,9 +140,6 @@ namespace Neuralium.MigrationService.Migrations
 
                     b.Property<string>("Summary")
                         .HasColumnType("text");
-
-                    b.Property<int>("SummaryVersion")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()

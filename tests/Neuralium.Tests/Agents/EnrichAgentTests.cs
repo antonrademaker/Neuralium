@@ -22,7 +22,7 @@ public class EnrichAgentTests : IDisposable
     {
         _loggerMock = new Mock<ILogger<EnrichAgent>>();
         _llmServiceMock = new Mock<ILlmService>();
-        
+
         _llmSettings = Options.Create(new LlmSettings
         {
             Enabled = true,
@@ -43,13 +43,13 @@ public class EnrichAgentTests : IDisposable
     public async Task ProcessAsync_WithValidItems_GeneratesSummariesAndEmbeddings()
     {
         // Arrange
-        var agent = new EnrichAgent(_loggerMock.Object, _llmServiceMock.Object, _llmSettings, _dbContext);
-        
+        var agent = new EnrichAgent(_loggerMock.Object, _llmServiceMock.Object, _llmSettings, _dbContext, Mock.Of<IArticleFetcherService>());
+
         var embeddingData = new float[] { 0.1f, 0.2f, 0.3f };
         _llmServiceMock
             .Setup(x => x.GenerateSummaryAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("Generated summary");
-        
+
         _llmServiceMock
             .Setup(x => x.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(embeddingData);
@@ -81,7 +81,7 @@ public class EnrichAgentTests : IDisposable
     {
         // Arrange
         var disabledSettings = Options.Create(new LlmSettings { Enabled = false });
-        var agent = new EnrichAgent(_loggerMock.Object, _llmServiceMock.Object, disabledSettings, _dbContext);
+        var agent = new EnrichAgent(_loggerMock.Object, _llmServiceMock.Object, disabledSettings, _dbContext, Mock.Of<IArticleFetcherService>());
 
         var context = new PipelineContext();
         context.ClassifiedItems.Add(new NewsItem
@@ -108,8 +108,8 @@ public class EnrichAgentTests : IDisposable
     public async Task ProcessAsync_WithExistingSummary_SkipsSummaryGeneration()
     {
         // Arrange
-        var agent = new EnrichAgent(_loggerMock.Object, _llmServiceMock.Object, _llmSettings, _dbContext);
-        
+        var agent = new EnrichAgent(_loggerMock.Object, _llmServiceMock.Object, _llmSettings, _dbContext, Mock.Of<IArticleFetcherService>());
+
         var embeddingData = new float[] { 0.1f, 0.2f };
         _llmServiceMock
             .Setup(x => x.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
