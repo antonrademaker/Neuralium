@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Neuralium.Data;
+using Neuralium.Data.Models;
 using Neuralium.Worker.Models;
 using Neuralium.Worker.Services;
 
@@ -108,7 +109,14 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
         using var activity = s_activitySource.StartActivity("Enrich items");
 
         // First, backfill any items from the database that are missing enrichments
-        var backfillStats = await BackfillMissingEnrichmentsAsync(cancellationToken);
+        var (backfillStats, backfilledItems) = await BackfillMissingEnrichmentsAsync(cancellationToken);
+
+        // Add backfilled items to the pipeline so they flow through Analyze and Publish
+        if (backfilledItems.Count > 0)
+        {
+            input.ClassifiedItems.AddRange(backfilledItems);
+            LogBackfilledItemsAddedToPipeline(backfilledItems.Count);
+        }
 
         LogEnrichStarting(input.ClassifiedItems.Count, _llmSettings.Enabled, backfillStats.ItemsProcessed);
 
@@ -221,14 +229,16 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     /// <summary>
     /// Backfills missing summaries and embeddings for items from previous pipeline runs.
     /// Processes ALL items that need enrichment, in batches of 10 for better resilience.
+    /// Returns the backfilled items so they can be added to the pipeline and flow through Analyze and Publish stages.
     /// </summary>
-    private async Task<BackfillStats> BackfillMissingEnrichmentsAsync(CancellationToken cancellationToken)
+    private async Task<(BackfillStats Stats, List<NewsItem> BackfilledItems)> BackfillMissingEnrichmentsAsync(CancellationToken cancellationToken)
     {
         var stats = new BackfillStats();
+        var backfilledItems = new List<NewsItem>();
 
         if (!_llmSettings.Enabled)
         {
-            return stats;
+            return (stats, backfilledItems);
         }
 
         const int batchSize = 10;
@@ -303,6 +313,9 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         LogBackfillBatchSaved("summaries", batchSummaries);
+                        
+                        // Add items with regenerated summaries to the backfilled list
+                        backfilledItems.AddRange(itemsMissingSummaries.Where(i => !string.IsNullOrEmpty(i.Summary)));
                     }
 
                     // Stop if we got fewer items than batch size (no more items to process)
@@ -394,7 +407,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
             LogBackfillFailed(ex.Message);
         }
 
-        return stats;
+        return (stats, backfilledItems);
     }
 
     private sealed record BackfillStats
@@ -422,6 +435,9 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Saved batch: {BatchSize} items ({Summaries} summaries, {Embeddings} embeddings)")]
     private partial void LogBatchSaved(int batchSize, int summaries, int embeddings);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Added {Count} backfilled items to pipeline for reprocessing")]
+    private partial void LogBackfilledItemsAddedToPipeline(int count);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Generated summary for: {Title}")]
     private partial void LogBackfillSummaryGenerated(string title);

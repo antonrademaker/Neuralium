@@ -1,0 +1,137 @@
+:host {
+    --bright-blue: oklch(51.01% 0.274 263.83);
+    --electric-violet: oklch(53.18% 0.28 296.97);
+    --french-violet: oklch(47.66% 0.246 305.88);
+    --vivid-pink: oklch(69.02% 0.277 332.77);
+    --hot-red: oklch(61.42% 0.238 15.34);
+    --orange-red: oklch(63.32% 0.24 31.68);
+
+    --gray-900: oklch(19.37% 0.006 300.98);
+    --gray-700: oklch(36.98% 0.014 302.71);
+    --gray-400: oklch(70.9% 0.015 304.04);
+    --gray-200: oklch(87.5% 0.005 304.04);
+
+    --pill-accent: var(--bright-blue);
+
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+        "Segoe UI Symbol";
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+h1 {
+    font-size: 3.125rem;
+    color: var(--gray-900);
+    font-weight: 500;
+    line-height: 100%;
+    margin-bottom: 1rem;
+}
+
+h2 {
+    font-size: 1.5rem;
+    color: var(--gray-900);
+    font-weight: 500;
+    margin-bottom: 1rem;
+}
+
+p {
+    margin: 0;
+    color: var(--gray-700);
+    font-size: 1.125rem;
+    line-height: 1.5;
+}
+
+.main {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.content {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    max-width: 1200px;
+    gap: 3rem;
+
+    @media (max-width: 768px) {
+        flex-direction: column;
+    }
+}
+
+.left-side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.right-side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.angular-logo {
+    max-width: 150px;
+    margin-bottom: 2rem;
+}
+
+.pill-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem 1.5rem;
+    border-radius: 2rem;
+    background-color: white;
+    color: var(--gray-900);
+    text-decoration: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    font-weight: 500;
+
+    &:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+        background: linear-gradient(90deg,
+                var(--orange-red) 0%,
+                var(--vivid-pink) 50%,
+                var(--electric-violet) 100%);
+        color: white;
+    }
+}
+
+.features,
+.status {
+    background-color: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+    ul,
+    ol {
+        margin: 0;
+        padding-left: 1.5rem;
+        color: var(--gray-700);
+
+        li {
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+        }
+    }
+}

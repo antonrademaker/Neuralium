@@ -33,6 +33,14 @@ var api = builder.AddProject<Projects.Neuralium_Api>("api")
                  .WithReference(db)
                  .WaitForCompletion(migrations);
 
+// Angular Frontend: News browsing and exploration UI
+var frontend = builder.AddJavaScriptApp("frontend", "../Neuralium.Frontend", "dev")
+                      .WithNpm()
+                      .WithHttpEndpoint(port: 4200, env: "PORT")
+                      .WithEnvironment("NODE_ENV", "development")
+                      .WithReference(api)
+                      .WaitFor(api);
+
 // Worker: One-shot execution pipeline (ingest → normalize → dedupe → classify → enrich → analyze → publish)
 // Scheduled externally via systemd timer or manual trigger
 var worker = builder.AddProject<Projects.Neuralium_Worker>("worker")

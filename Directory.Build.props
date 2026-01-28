@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
+    <!-- Exclude Angular/Node directories from C# build -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/node_modules/**;**/dist/**;**/.angular/**</DefaultItemExcludes>
+
     <!-- Build quality -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsAsErrors>
