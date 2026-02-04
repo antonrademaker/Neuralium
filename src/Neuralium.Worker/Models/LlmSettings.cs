@@ -36,6 +36,16 @@ public sealed class LlmSettings
     public string? EmbeddingModelName { get; set; }
 
     /// <summary>
+    /// Enable classification for news items using LLM
+    /// </summary>
+    public bool EnableClassification { get; set; }
+
+    /// <summary>
+    /// Enable trend analysis (entity extraction and insights) using LLM
+    /// </summary>
+    public bool EnableTrendAnalysis { get; set; }
+
+    /// <summary>
     /// Enable summarization for news items
     /// </summary>
     public bool EnableSummarization { get; set; } = true;

@@ -132,6 +132,277 @@ Summary:";
             cancellationToken);
     }
 
+    public async Task<List<string>?> ClassifyTopicsAsync(
+        string title,
+        string content,
+        List<string> availableTopics,
+        List<string>? keywordTopics = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("ClassifyTopics");
+        activity?.SetTag("title", title);
+        activity?.SetTag("available_topics.count", availableTopics.Count);
+
+        if (!_settings.Enabled || !_settings.EnableClassification)
+        {
+            LogClassificationDisabled();
+            return null;
+        }
+
+        if (_client == null)
+        {
+            LogClientNotInitialized("classification");
+            return null;
+        }
+
+        // Build prompt for classification
+        var topicsString = string.Join(", ", availableTopics);
+        var keywordContext = keywordTopics != null && keywordTopics.Count > 0
+            ? $"\n\nKeyword matching suggested these topics: {string.Join(", ", keywordTopics)}\nConsider these suggestions but make your own determination based on the content."
+            : "";
+
+        var prompt = $@"You are a news article classifier. Classify the following article into one or more relevant topics from the list provided.
+
+Available Topics: {topicsString}
+
+Title: {title}
+
+Content: {content.Substring(0, Math.Min(content.Length, 1000))}{keywordContext}
+
+Instructions:
+- Select all relevant topics that apply (the article may belong to multiple topics)
+- Only use topics from the available list
+- Be precise and avoid over-classification
+- Return ONLY a JSON array of topic names, nothing else
+
+Example response: [""AI"", ""Machine Learning""]
+
+Your classification:";
+
+        return await ExecuteWithRetryAsync(
+            async () =>
+            {
+                var chatClient = _client.GetChatClient(_settings.ModelName);
+
+                var response = await chatClient.CompleteChatAsync(
+                    [new UserChatMessage(prompt)],
+                    new ChatCompletionOptions
+                    {
+                        MaxOutputTokenCount = 100,
+                        Temperature = 0.1f // Low temperature for more deterministic classification
+                    },
+                    cancellationToken);
+
+                var responseText = response.Value.Content[0].Text?.Trim();
+
+                if (string.IsNullOrEmpty(responseText))
+                {
+                    LogClassificationFailed("Empty response from LLM");
+                    return null;
+                }
+
+                // Parse JSON array from response
+                try
+                {
+                    // Remove markdown code blocks if present
+                    responseText = responseText.Replace("```json", "").Replace("```", "").Trim();
+
+                    var topics = System.Text.Json.JsonSerializer.Deserialize<List<string>>(responseText);
+
+                    if (topics == null || topics.Count == 0)
+                    {
+                        LogClassificationFailed("No topics in response");
+                        return null;
+                    }
+
+                    // Validate that returned topics are in available list (case-insensitive)
+                    var validTopics = topics
+                        .Where(t => availableTopics.Any(at => at.Equals(t, StringComparison.OrdinalIgnoreCase)))
+                        .ToList();
+
+                    activity?.SetTag("response.tokens", response.Value.Usage.TotalTokenCount);
+                    activity?.SetTag("classified_topics.count", validTopics.Count);
+                    LogTopicsClassified(title, validTopics.Count, string.Join(", ", validTopics));
+
+                    return validTopics;
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    LogClassificationFailed($"JSON parse error: {ex.Message}. Response: {responseText}");
+                    return null;
+                }
+            },
+            "classification",
+            cancellationToken);
+    }
+
+    public async Task<List<string>?> ExtractEntitiesAsync(
+        string title,
+        string content,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("ExtractEntities");
+        activity?.SetTag("title", title);
+
+        if (!_settings.Enabled || !_settings.EnableTrendAnalysis)
+        {
+            LogTrendAnalysisDisabled();
+            return null;
+        }
+
+        if (_client == null)
+        {
+            LogClientNotInitialized("entity extraction");
+            return null;
+        }
+
+        var prompt = $@"Extract key entities from this AI/technology news article. Focus on:
+- Companies and organizations
+- Products and platforms  
+- Technologies and frameworks
+- Programming languages
+- Key people (if mentioned prominently)
+
+Title: {title}
+
+Content: {content.Substring(0, Math.Min(content.Length, 1500))}
+
+Instructions:
+- Return ONLY a JSON array of entity names
+- Use proper capitalization (e.g., ""OpenAI"", ""ChatGPT"", ""Microsoft"")
+- Include 3-10 most relevant entities
+- Be precise and avoid duplicates
+
+Example: [""OpenAI"", ""GPT-4"", ""Microsoft"", ""Azure""]
+
+Your response:";
+
+        return await ExecuteWithRetryAsync(
+            async () =>
+            {
+                var chatClient = _client.GetChatClient(_settings.ModelName);
+
+                var response = await chatClient.CompleteChatAsync(
+                    [new UserChatMessage(prompt)],
+                    new ChatCompletionOptions
+                    {
+                        MaxOutputTokenCount = 100,
+                        Temperature = 0.2f
+                    },
+                    cancellationToken);
+
+                var responseText = response.Value.Content[0].Text?.Trim();
+
+                if (string.IsNullOrEmpty(responseText))
+                {
+                    LogEntityExtractionFailed("Empty response from LLM");
+                    return null;
+                }
+
+                try
+                {
+                    responseText = responseText.Replace("```json", "").Replace("```", "").Trim();
+                    var entities = System.Text.Json.JsonSerializer.Deserialize<List<string>>(responseText);
+
+                    if (entities == null || entities.Count == 0)
+                    {
+                        LogEntityExtractionFailed("No entities in response");
+                        return null;
+                    }
+
+                    activity?.SetTag("entities.count", entities.Count);
+                    LogEntitiesExtracted(title, entities.Count);
+
+                    return entities;
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    LogEntityExtractionFailed($"JSON parse error: {ex.Message}. Response: {responseText}");
+                    return null;
+                }
+            },
+            "entity extraction",
+            cancellationToken);
+    }
+
+    public async Task<string?> AnalyzeTrendInsightsAsync(
+        List<(string Title, string Summary, List<string> Topics, DateTime Published)> articles,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = _activitySource.StartActivity("AnalyzeTrendInsights");
+        activity?.SetTag("articles.count", articles.Count);
+
+        if (!_settings.Enabled || !_settings.EnableTrendAnalysis)
+        {
+            LogTrendAnalysisDisabled();
+            return null;
+        }
+
+        if (_client == null)
+        {
+            LogClientNotInitialized("trend analysis");
+            return null;
+        }
+
+        if (articles.Count == 0)
+        {
+            return null;
+        }
+
+        // Build article summaries for analysis
+        var articleSummaries = new System.Text.StringBuilder();
+        foreach (var (title, summary, topics, published) in articles.Take(20)) // Limit to 20 articles
+        {
+            var topicsStr = string.Join(", ", topics);
+            articleSummaries.AppendLine($"- [{published:yyyy-MM-dd}] {title}");
+            articleSummaries.AppendLine($"  Topics: {topicsStr}");
+            if (!string.IsNullOrEmpty(summary))
+            {
+                articleSummaries.AppendLine($"  Summary: {summary}");
+            }
+            articleSummaries.AppendLine();
+        }
+
+        var prompt = $@"Analyze these recent AI/technology articles and identify emerging trends, patterns, or themes.
+
+Articles:
+{articleSummaries}
+
+Provide a concise trend analysis (2-3 sentences) that:
+- Identifies the most significant emerging patterns
+- Notes any momentum or clustering around specific topics
+- Highlights what's gaining attention
+
+Your analysis:";
+
+        return await ExecuteWithRetryAsync(
+            async () =>
+            {
+                var chatClient = _client.GetChatClient(_settings.ModelName);
+
+                var response = await chatClient.CompleteChatAsync(
+                    [new UserChatMessage(prompt)],
+                    new ChatCompletionOptions
+                    {
+                        MaxOutputTokenCount = 200,
+                        Temperature = 0.4f
+                    },
+                    cancellationToken);
+
+                var insight = response.Value.Content[0].Text?.Trim();
+
+                if (!string.IsNullOrEmpty(insight))
+                {
+                    activity?.SetTag("response.tokens", response.Value.Usage.TotalTokenCount);
+                    LogTrendInsightsGenerated(articles.Count);
+                }
+
+                return insight;
+            },
+            "trend analysis",
+            cancellationToken);
+    }
+
     private async Task<T?> ExecuteWithRetryAsync<T>(
         Func<Task<T?>> operation,
         string operationName,
@@ -230,4 +501,25 @@ Summary:";
 
     [LoggerMessage(Level = LogLevel.Error, Message = "LLM {Operation} failed with unexpected error")]
     private partial void LogUnexpectedError(string operation, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Classification disabled via configuration")]
+    private partial void LogClassificationDisabled();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Classified '{Title}' into {Count} topics: {Topics}")]
+    private partial void LogTopicsClassified(string title, int count, string topics);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Classification failed: {Reason}")]
+    private partial void LogClassificationFailed(string reason);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Trend analysis disabled via configuration")]
+    private partial void LogTrendAnalysisDisabled();
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Extracted {Count} entities from '{Title}'")]
+    private partial void LogEntitiesExtracted(string title, int count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Entity extraction failed: {Reason}")]
+    private partial void LogEntityExtractionFailed(string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Generated trend insights for {Count} articles")]
+    private partial void LogTrendInsightsGenerated(int count);
 }

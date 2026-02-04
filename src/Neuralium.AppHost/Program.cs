@@ -17,9 +17,9 @@ var postgres = builder.AddPostgres("postgres", password: postgresPassword)
                       .WithLifetime(ContainerLifetime.Persistent)  // Keep running when AppHost stops
                       .WithPgAdmin(c =>
                       {
-                          c.WithLifetime(ContainerLifetime.Persistent);
-                      }
-                      );                      // Web-based admin UI
+                          c.WithLifetime(ContainerLifetime.Persistent)
+                           .WithHostPort(5050);  // Fixed port for pgAdmin
+                      });
 
 var db = postgres.AddDatabase("neuralium");
 

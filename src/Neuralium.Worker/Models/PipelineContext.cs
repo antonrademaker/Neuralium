@@ -66,4 +66,10 @@ public class PipelineMetadata
     /// Populated by AnalyzeAgent, consumed by PublishAgent.
     /// </summary>
     public List<NewsItemScore> PendingScores { get; set; } = [];
+
+    /// <summary>
+    /// Optional LLM-generated trend insights for the current batch of articles.
+    /// Populated by AnalyzeAgent when LLM trend analysis is enabled.
+    /// </summary>
+    public string? TrendInsights { get; set; }
 }

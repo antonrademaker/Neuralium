@@ -27,6 +27,9 @@ var builder = Host.CreateApplicationBuilder(args);
 // Configure LLM settings from appsettings
 builder.Services.Configure<LlmSettings>(builder.Configuration.GetSection("Llm"));
 
+// Configure Worker settings from appsettings
+builder.Services.Configure<WorkerSettings>(builder.Configuration.GetSection("Worker"));
+
 // Add ActivitySource for LLM telemetry
 var llmActivitySource = new ActivitySource("Neuralium.Worker.LlmService");
 

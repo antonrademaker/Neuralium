@@ -2,23 +2,29 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 using Neuralium.Data;
 using Neuralium.Data.Models;
 using Neuralium.Worker.Agents;
 using Neuralium.Worker.Models;
+using Neuralium.Worker.Services;
 
 namespace Neuralium.Tests.Agents;
 
 public class ClassifyAgentTests : IDisposable
 {
     private readonly Mock<ILogger<ClassifyAgent>> _loggerMock;
+    private readonly Mock<ILlmService> _llmServiceMock;
+    private readonly IOptions<LlmSettings> _llmSettings;
     private readonly NeuraliumDbContext _dbContext;
 
     public ClassifyAgentTests()
     {
         _loggerMock = new Mock<ILogger<ClassifyAgent>>();
-        
+        _llmServiceMock = new Mock<ILlmService>();
+        _llmSettings = Options.Create(new LlmSettings { Enabled = false }); // Disabled by default for tests
+
         var options = new DbContextOptionsBuilder<NeuraliumDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
@@ -30,8 +36,8 @@ public class ClassifyAgentTests : IDisposable
     {
         // Arrange
         await SeedTopicKeywords();
-        var agent = new ClassifyAgent(_loggerMock.Object, _dbContext);
-        
+        var agent = new ClassifyAgent(_loggerMock.Object, _dbContext, _llmServiceMock.Object, _llmSettings);
+
         var context = new PipelineContext();
         context.UniqueItems.Add(new NewsItem
         {
@@ -58,8 +64,8 @@ public class ClassifyAgentTests : IDisposable
     {
         // Arrange
         await SeedTopicKeywords();
-        var agent = new ClassifyAgent(_loggerMock.Object, _dbContext);
-        
+        var agent = new ClassifyAgent(_loggerMock.Object, _dbContext, _llmServiceMock.Object, _llmSettings);
+
         var context = new PipelineContext();
         context.UniqueItems.Add(new NewsItem
         {
@@ -78,10 +84,10 @@ public class ClassifyAgentTests : IDisposable
         result.ClassifiedItems.Should().HaveCount(1);
     }
 
-    private static readonly string[] s_aiKeywords = [ "ai", "artificial intelligence", "neural network" ];
-    private static readonly string[] s_mlKeywords = [ "machine learning", "ml", "model training" ];
-    private static readonly string[] s_blockchainKeywords = [ "blockchain", "distributed ledger" ];
-    private static readonly string[] s_cloudKeywords = [ "cloud computing", "aws", "azure" ];
+    private static readonly string[] s_aiKeywords = ["ai", "artificial intelligence", "neural network"];
+    private static readonly string[] s_mlKeywords = ["machine learning", "ml", "model training"];
+    private static readonly string[] s_blockchainKeywords = ["blockchain", "distributed ledger"];
+    private static readonly string[] s_cloudKeywords = ["cloud computing", "aws", "azure"];
 
     private async Task SeedTopicKeywords()
     {
@@ -106,16 +112,16 @@ public class ClassifyAgentTests : IDisposable
 
     // TODO: Add tests for case sensitivity
     // - Verify keywords match regardless of case (AI, ai, Ai)
-    
+
     // TODO: Add tests for keyword priority/weighting
     // - Test scoring when multiple keywords match
     // - Test minimum confidence threshold
-    
+
     // TODO: Add tests for LLM-based classification (future)
     // - Mock LLM service responses
     // - Test fallback to keyword-based when LLM unavailable
     // - Test hybrid approach (keywords + LLM)
-    
+
     // TODO: Add performance tests
     // - Large batches of items (1000+)
     // - Many topics/keywords (100+)
