@@ -82,13 +82,13 @@ public sealed partial class WorkerService(
     private async Task BackfillMissingScoresAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
         using var activity = s_activitySource.StartActivity("Backfill missing scores");
-        
+
         var dbContext = serviceProvider.GetRequiredService<NeuraliumDbContext>();
         var analyzeAgent = serviceProvider.GetRequiredService<AnalyzeAgent>();
 
         // Find items without scores (last N days)
         var cutoffDate = DateTime.UtcNow.AddDays(-_workerSettings.BackfillMaxDays);
-        
+
         var itemsWithoutScores = await dbContext.NewsItems
             .Where(item => item.PublishedAtUtc >= cutoffDate)
             .Where(item => !dbContext.NewsItemScores.Any(score => score.NewsItemId == item.Id))
@@ -128,7 +128,7 @@ public sealed partial class WorkerService(
 
             dbContext.NewsItemScores.AddRange(context.Metadata.PendingScores);
             var savedScores = await dbContext.SaveChangesAsync(cancellationToken);
-            
+
             LogBackfillCompleted(savedScores);
         }
     }
