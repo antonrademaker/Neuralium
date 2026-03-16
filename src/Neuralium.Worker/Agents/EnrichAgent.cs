@@ -152,12 +152,12 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                         var contentToSummarize = item.RawContent;
                         if (_articleFetcher.IsInsufficientContent(item.RawContent))
                         {
-                            LogFetchingFullArticle(item.Title);
+                            LogFetchingFullArticle(item.Title, item.Url);
                             var fetchedContent = await _articleFetcher.FetchArticleContentAsync(item.Url, cancellationToken);
                             if (!string.IsNullOrWhiteSpace(fetchedContent))
                             {
                                 contentToSummarize = fetchedContent;
-                                LogFetchedArticleContent(item.Title, fetchedContent.Length);
+                                LogFetchedArticleContent(item.Title, item.Url, fetchedContent.Length);
                             }
                         }
 
@@ -172,7 +172,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                                 summariesGenerated++;
                                 batchSummaries++;
                                 s_summariesGenerated.Add(1);
-                                LogSummaryGenerated(item.Title);
+                                LogSummaryGenerated(item.Title, item.Url);
                             }
                         }
                     }
@@ -190,7 +190,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                                 embeddingsGenerated++;
                                 batchEmbeddings++;
                                 s_embeddingsGenerated.Add(1);
-                                LogEmbeddingGenerated(item.Title, embedding.Length);
+                                LogEmbeddingGenerated(item.Title, item.Url, embedding.Length);
                             }
                         }
                     }
@@ -199,7 +199,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                 {
                     errors++;
                     s_enrichmentErrors.Add(1);
-                    LogEnrichmentError(item.Title, ex.Message);
+                    LogEnrichmentError(item.Title, item.Url, ex.Message);
                     // Continue processing other items even if one fails
                 }
             }
@@ -274,12 +274,12 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                             var contentToSummarize = item.RawContent;
                             if (_articleFetcher.IsInsufficientContent(item.RawContent))
                             {
-                                LogBackfillFetchingArticle(item.Title);
+                                LogBackfillFetchingArticle(item.Title, item.Url);
                                 var fetchedContent = await _articleFetcher.FetchArticleContentAsync(item.Url, cancellationToken);
                                 if (!string.IsNullOrWhiteSpace(fetchedContent))
                                 {
                                     contentToSummarize = fetchedContent;
-                                    LogBackfillFetchedContent(item.Title, fetchedContent.Length);
+                                    LogBackfillFetchedContent(item.Title, item.Url, fetchedContent.Length);
                                 }
                             }
 
@@ -294,7 +294,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                                     stats.SummariesGenerated++;
                                     batchSummaries++;
                                     s_summariesGenerated.Add(1);
-                                    LogBackfillSummaryGenerated(item.Title);
+                                    LogBackfillSummaryGenerated(item.Title, item.Url);
                                 }
                             }
                         }
@@ -302,7 +302,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                         {
                             stats.Errors++;
                             s_enrichmentErrors.Add(1);
-                            LogBackfillError(item.Title, "summary", ex.Message);
+                            LogBackfillError(item.Title, item.Url, "summary", ex.Message);
                         }
                     }
 
@@ -363,7 +363,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                                     stats.EmbeddingsGenerated++;
                                     batchEmbeddings++;
                                     s_embeddingsGenerated.Add(1);
-                                    LogBackfillEmbeddingGenerated(item.Title, embedding.Length);
+                                    LogBackfillEmbeddingGenerated(item.Title, item.Url, embedding.Length);
                                 }
                             }
 
@@ -378,7 +378,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                         {
                             stats.Errors++;
                             s_enrichmentErrors.Add(1);
-                            LogBackfillError(item.Title, "embedding", ex.Message);
+                            LogBackfillError(item.Title, item.Url, "embedding", ex.Message);
                         }
                     }
 
@@ -421,14 +421,14 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     [LoggerMessage(Level = LogLevel.Information, Message = "Enrich: Processing {Count} classified items (LLM enabled: {LlmEnabled}), backfilled {BackfilledCount} items...")]
     private partial void LogEnrichStarting(int count, bool llmEnabled, int backfilledCount);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Generated summary for: {Title}")]
-    private partial void LogSummaryGenerated(string title);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Generated summary for: {Title} ({Url})")]
+    private partial void LogSummaryGenerated(string title, string url);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Generated embedding for: {Title} ({Dimensions} dimensions)")]
-    private partial void LogEmbeddingGenerated(string title, int dimensions);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Generated embedding for: {Title} ({Url}) ({Dimensions} dimensions)")]
+    private partial void LogEmbeddingGenerated(string title, string url, int dimensions);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to enrich item '{Title}': {Error}")]
-    private partial void LogEnrichmentError(string title, string error);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to enrich item '{Title}' ({Url}): {Error}")]
+    private partial void LogEnrichmentError(string title, string url, string error);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Enrich: Completed - {TotalCount} items, {Summaries} summaries, {Embeddings} embeddings, {Errors} errors")]
     private partial void LogEnrichCompleted(int totalCount, int summaries, int embeddings, int errors);
@@ -439,14 +439,14 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     [LoggerMessage(Level = LogLevel.Information, Message = "Added {Count} backfilled items to pipeline for reprocessing")]
     private partial void LogBackfilledItemsAddedToPipeline(int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Generated summary for: {Title}")]
-    private partial void LogBackfillSummaryGenerated(string title);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Generated summary for: {Title} ({Url})")]
+    private partial void LogBackfillSummaryGenerated(string title, string url);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Generated embedding for: {Title} ({Dimensions} dimensions)")]
-    private partial void LogBackfillEmbeddingGenerated(string title, int dimensions);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Generated embedding for: {Title} ({Url}) ({Dimensions} dimensions)")]
+    private partial void LogBackfillEmbeddingGenerated(string title, string url, int dimensions);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Backfill: Failed to generate {Type} for '{Title}': {Error}")]
-    private partial void LogBackfillError(string title, string type, string error);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Backfill: Failed to generate {Type} for '{Title}' ({Url}): {Error}")]
+    private partial void LogBackfillError(string title, string url, string type, string error);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Backfill: Completed - {ItemCount} items, {Summaries} summaries, {Embeddings} embeddings")]
     private partial void LogBackfillCompleted(int itemCount, int summaries, int embeddings);
@@ -457,15 +457,15 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
     [LoggerMessage(Level = LogLevel.Warning, Message = "Backfill: Failed to process items: {Error}")]
     private partial void LogBackfillFailed(string error);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Fetching full article content for: {Title}")]
-    private partial void LogFetchingFullArticle(string title);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Fetching full article content for: {Title} ({Url})")]
+    private partial void LogFetchingFullArticle(string title, string url);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Fetched article content for '{Title}' ({Length} chars)")]
-    private partial void LogFetchedArticleContent(string title, int length);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Fetched article content for '{Title}' ({Url}) ({Length} chars)")]
+    private partial void LogFetchedArticleContent(string title, string url, int length);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Fetching article for: {Title}")]
-    private partial void LogBackfillFetchingArticle(string title);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Backfill: Fetching article for: {Title} ({Url})")]
+    private partial void LogBackfillFetchingArticle(string title, string url);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Backfill: Fetched article for '{Title}' ({Length} chars)")]
-    private partial void LogBackfillFetchedContent(string title, int length);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Backfill: Fetched article for '{Title}' ({Url}) ({Length} chars)")]
+    private partial void LogBackfillFetchedContent(string title, string url, int length);
 }

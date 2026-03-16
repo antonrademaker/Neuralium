@@ -25,21 +25,23 @@ public interface ILlmService
     /// Classifies content into topics using an LLM.
     /// </summary>
     /// <param name="title">The title of the content.</param>
+    /// <param name="url">The URL of the content.</param>
     /// <param name="content">The content to classify.</param>
     /// <param name="availableTopics">List of available topics to choose from.</param>
     /// <param name="keywordTopics">Topics suggested by keyword matching (for hybrid approach).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>List of classified topics, or null if classification fails.</returns>
-    Task<List<string>?> ClassifyTopicsAsync(string title, string content, List<string> availableTopics, List<string>? keywordTopics = null, CancellationToken cancellationToken = default);
+    Task<List<string>?> ClassifyTopicsAsync(string title, string url, string content, List<string> availableTopics, List<string>? keywordTopics = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Extracts key entities (companies, products, technologies, people) from content.
     /// </summary>
     /// <param name="title">The title of the content.</param>
+    /// <param name="url">The URL of the content.</param>
     /// <param name="content">The content to analyze.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>List of extracted entities, or null if extraction fails.</returns>
-    Task<List<string>?> ExtractEntitiesAsync(string title, string content, CancellationToken cancellationToken = default);
+    Task<List<string>?> ExtractEntitiesAsync(string title, string url, string content, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Analyzes a group of related articles to identify trend insights.

@@ -66,6 +66,7 @@ public partial class ClassifyAgent(
                     // Use LLM to refine classification, passing keyword results as context
                     var llmTopics = await llmService.ClassifyTopicsAsync(
                         item.Title,
+                        item.Url,
                         contentForLlm,
                         availableTopics,
                         keywordTopics,
@@ -75,12 +76,12 @@ public partial class ClassifyAgent(
                     if (llmTopics != null && llmTopics.Count > 0)
                     {
                         finalTopics = llmTopics;
-                        LogLlmClassificationUsed(item.Title, finalTopics.Count);
+                        LogLlmClassificationUsed(item.Title, item.Url, finalTopics.Count);
                     }
                     else
                     {
                         finalTopics = keywordTopics;
-                        LogLlmClassificationFailed(item.Title, keywordTopics.Count);
+                        LogLlmClassificationFailed(item.Title, item.Url, keywordTopics.Count);
                     }
                 }
                 else
@@ -93,18 +94,22 @@ public partial class ClassifyAgent(
                 if (finalTopics.Count > 0)
                 {
                     item.TopicsJson = JsonSerializer.Serialize(finalTopics);
-                    LogItemClassified(item.Title, finalTopics.Count, string.Join(", ", finalTopics));
+                    if (logger.IsEnabled(LogLevel.Debug))
+                    {
+                        var topicsList = string.Join(", ", finalTopics);
+                        LogItemClassified(item.Title, item.Url, finalTopics.Count, topicsList);
+                    }
                 }
                 else
                 {
-                    LogItemUnclassified(item.Title);
+                    LogItemUnclassified(item.Title, item.Url);
                 }
 
                 input.ClassifiedItems.Add(item);
             }
             catch (Exception ex)
             {
-                LogClassificationError(item.Title, ex.Message);
+                LogClassificationError(item.Title, item.Url, ex.Message);
                 input.Metadata.Errors.Add($"[Classify:{item.Title}] {ex.Message}");
             }
         }
@@ -146,21 +151,21 @@ public partial class ClassifyAgent(
     [LoggerMessage(Level = LogLevel.Information, Message = "Classify: Loaded {Count} topics from database")]
     private partial void LogLoadedTopics(int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: '{Title}' matched {Count} topics: {Topics}")]
-    private partial void LogItemClassified(string title, int count, string topics);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: '{Title}' ({Url}) matched {Count} topics: {Topics}")]
+    private partial void LogItemClassified(string title, string url, int count, string topics);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: '{Title}' matched no topics")]
-    private partial void LogItemUnclassified(string title);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: '{Title}' ({Url}) matched no topics")]
+    private partial void LogItemUnclassified(string title, string url);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Classify: Error processing '{Title}': {Error}")]
-    private partial void LogClassificationError(string title, string error);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Classify: Error processing '{Title}' ({Url}): {Error}")]
+    private partial void LogClassificationError(string title, string url, string error);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Classify: Completed with {Count} classified items")]
     private partial void LogClassifyCompleted(int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: LLM refined '{Title}' classification to {Count} topics")]
-    private partial void LogLlmClassificationUsed(string title, int count);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: LLM refined '{Title}' ({Url}) classification to {Count} topics")]
+    private partial void LogLlmClassificationUsed(string title, string url, int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: LLM failed for '{Title}', using {Count} keyword topics")]
-    private partial void LogLlmClassificationFailed(string title, int count);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Classify: LLM failed for '{Title}' ({Url}), using {Count} keyword topics")]
+    private partial void LogLlmClassificationFailed(string title, string url, int count);
 }

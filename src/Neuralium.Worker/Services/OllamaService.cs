@@ -166,6 +166,7 @@ Summary:";
 
     public async Task<List<string>?> ClassifyTopicsAsync(
         string title,
+        string url,
         string content,
         List<string> availableTopics,
         List<string>? keywordTopics = null,
@@ -173,6 +174,7 @@ Summary:";
     {
         using var activity = _activitySource.StartActivity("ClassifyTopics");
         activity?.SetTag("title", title);
+        activity?.SetTag("url", url);
         activity?.SetTag("available_topics.count", availableTopics.Count);
 
         if (!_settings.Enabled || !_settings.EnableClassification)
@@ -254,7 +256,11 @@ Your classification:";
                     .ToList();
 
                 activity?.SetTag("classified_topics.count", validTopics.Count);
-                LogTopicsClassified(title, validTopics.Count, string.Join(", ", validTopics));
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    var topicsList = string.Join(", ", validTopics);
+                    LogTopicsClassified(title, url, validTopics.Count, topicsList);
+                }
 
                 return validTopics;
             }
@@ -283,11 +289,13 @@ Your classification:";
 
     public async Task<List<string>?> ExtractEntitiesAsync(
         string title,
+        string url,
         string content,
         CancellationToken cancellationToken = default)
     {
         using var activity = _activitySource.StartActivity("ExtractEntities");
         activity?.SetTag("title", title);
+        activity?.SetTag("url", url);
 
         if (!_settings.Enabled || !_settings.EnableTrendAnalysis)
         {
@@ -357,7 +365,7 @@ Your response:";
                 }
 
                 activity?.SetTag("entities.count", entities.Count);
-                LogEntitiesExtracted(title, entities.Count);
+                LogEntitiesExtracted(title, url, entities.Count);
 
                 return entities;
             }
@@ -511,8 +519,8 @@ Your analysis:";
     [LoggerMessage(Level = LogLevel.Debug, Message = "Classification disabled via configuration")]
     private partial void LogClassificationDisabled();
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Classified '{Title}' into {Count} topics: {Topics}")]
-    private partial void LogTopicsClassified(string title, int count, string topics);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Classified '{Title}' ({Url}) into {Count} topics: {Topics}")]
+    private partial void LogTopicsClassified(string title, string url, int count, string topics);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Classification failed: {Reason}")]
     private partial void LogClassificationFailed(string reason);
@@ -520,8 +528,8 @@ Your analysis:";
     [LoggerMessage(Level = LogLevel.Debug, Message = "Trend analysis disabled via configuration")]
     private partial void LogTrendAnalysisDisabled();
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Extracted {Count} entities from '{Title}'")]
-    private partial void LogEntitiesExtracted(string title, int count);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Extracted {Count} entities from '{Title}' ({Url})")]
+    private partial void LogEntitiesExtracted(string title, string url, int count);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Entity extraction failed: {Reason}")]
     private partial void LogEntityExtractionFailed(string reason);

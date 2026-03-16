@@ -86,13 +86,14 @@ public partial class AnalyzeAgent(
 
                     var entities = await llmService.ExtractEntitiesAsync(
                         item.Title,
+                        item.Url,
                         contentForLlm,
                         cancellationToken);
 
                     if (entities != null && entities.Count > 0)
                     {
                         item.EntitiesJson = JsonSerializer.Serialize(entities);
-                        LogEntitiesExtracted(item.Title, entities.Count);
+                        LogEntitiesExtracted(item.Title, item.Url, entities.Count);
                     }
                 }
 
@@ -311,8 +312,8 @@ public partial class AnalyzeAgent(
     [LoggerMessage(Level = LogLevel.Debug, Message = "Analyze: Calculated momentum for {Count} topics")]
     private partial void LogMomentumCalculated(int count);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Analyze: Extracted entities for '{Title}': {Count} entities")]
-    private partial void LogEntitiesExtracted(string title, int count);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Analyze: Extracted entities for '{Title}' ({Url}): {Count} entities")]
+    private partial void LogEntitiesExtracted(string title, string url, int count);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Analyze: Generated trend insights for batch")]
     private partial void LogTrendInsightsGenerated();
