@@ -313,7 +313,7 @@ public partial class EnrichAgent : IAgent<PipelineContext, PipelineContext>
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         LogBackfillBatchSaved("summaries", batchSummaries);
-                        
+
                         // Add items with regenerated summaries to the backfilled list
                         backfilledItems.AddRange(itemsMissingSummaries.Where(i => !string.IsNullOrEmpty(i.Summary)));
                     }

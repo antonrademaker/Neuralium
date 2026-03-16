@@ -123,6 +123,7 @@ public class EnrichAgentTests : IDisposable
             Source = "test-source",
             UrlHash = "test-hash",
             Summary = "Existing summary",
+            SummaryVersion = 1, // Set to current version to indicate summary is up-to-date
             RawContent = "Test content",
             PublishedAtUtc = DateTime.UtcNow
         });
